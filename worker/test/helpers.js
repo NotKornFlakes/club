@@ -126,3 +126,38 @@ export async function loginMember(member, ip = newIp()) {
 export async function resetThrottle() {
   await db.batch([db.prepare("DELETE FROM login_failures"), db.prepare("DELETE FROM system_state")]);
 }
+
+/**
+ * The current authenticator code for a test admin.
+ * @param {string} secretBase32 @param {number} [offsetSteps]
+ */
+export async function totpNow(secretBase32, offsetSteps = 0) {
+  const { base32Decode, totpCode, totpStep } = await import("../src/totp.js");
+  const secret = base32Decode(secretBase32);
+  if (!secret) throw new Error("bad secret");
+  return totpCode(secret, totpStep(nowSeconds()) + offsetSteps);
+}
+
+/**
+ * Logs an admin in (password + current code) and returns helpers that send their cookie
+ * and CSRF token. Each call first clears the "last code used" so tests can log in again.
+ * @param {{ id: number, username: string, password: string, totpSecret: string }} admin @param {string} [ip]
+ * @returns {Promise<Session>}
+ */
+export async function loginAdmin(admin, ip = newIp()) {
+  await db.prepare("UPDATE admins SET totp_last_step = 0 WHERE id = ?").bind(admin.id).run();
+  const response = await post(
+    "/api/admin/login",
+    { username: admin.username, password: admin.password, totp_code: await totpNow(admin.totpSecret) },
+    { ip },
+  );
+  if (response.status !== 200) throw new Error(`admin login failed: ${response.status} ${await response.text()}`);
+  const cookie = cookieFrom(response);
+  const me = /** @type {{ csrf_token: string }} */ (await (await get("/api/admin/me", { cookie })).json());
+  return {
+    cookie,
+    csrf: me.csrf_token,
+    post: (path, body = {}) => post(path, body, { cookie, csrf: me.csrf_token, ip }),
+    get: (path) => get(path, { cookie, ip }),
+  };
+}

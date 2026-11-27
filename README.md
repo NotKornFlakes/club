@@ -7,8 +7,8 @@ members, resources, leagues and no-shows.
 It runs as one Cloudflare Worker with a D1 database, all set up by Terraform and deployed by
 GitHub Actions. Design and reasoning: [docs/architecture.md](docs/architecture.md).
 
-> **Status:** foundation only. The site serves a home page and the booking rules. Member
-> login, booking and admin arrive in the next PRs.
+> **Status:** member login, booking, no-shows and suspensions, and admin are built and run
+> locally (see "Run it locally"). Hardening, then the club's own domain, come next.
 
 ## What's where
 
@@ -94,6 +94,84 @@ npx wrangler secret put PEPPER  # paste it when asked
 openssl rand -base64 32         # a different value: save it as IP_HASH_KEY
 npx wrangler secret put IP_HASH_KEY
 ```
+
+## Running the club (admin how-tos)
+
+Admin pages are at `/admin/`. Admins log in with a username, a password of at least 16
+characters, and the 6-digit code from an authenticator app. Admin sessions last 12 hours.
+Every admin action goes in the **Audit log** (kept 24 months, can't be edited).
+
+### First-time admin setup (once per admin, at most two)
+
+1. Make a long random setup token and set it as a Worker secret:
+   `openssl rand -base64 32`, then `cd worker && npx wrangler secret put ADMIN_SETUP_TOKEN`.
+2. Open `/admin/setup`, enter the token, and add the key it shows to your authenticator app
+   (type it in, or tap the link on your phone). Choose a username and password (save it in
+   your password manager) and enter the current code.
+3. Repeat for the backup admin, then delete the token: `npx wrangler secret delete ADMIN_SETUP_TOKEN`.
+   Setup is closed from then on.
+
+If one admin loses their password or authenticator, the other opens **Dashboard → Admins →
+Reset login** and gives them the new temporary password and key in person or by phone. If
+both are lost, set a new setup token and repeat setup.
+
+### Issuing PINs
+
+- **One member:** **Members → Add a member** (member number, optional name only admins see).
+- **Many members:** **Members → Import members from a CSV file**. One member per line,
+  `member number,name` (the name is optional; a header line is fine). Existing numbers are
+  skipped. The page sends 25 at a time.
+- Either way, the new PINs appear **once** on the **New PINs** sheet. **Print it before you
+  leave the page.** PINs are stored only as salted, peppered hashes, so nobody, including you,
+  can look one up later. If the page closes first, reset those members' PINs.
+
+### Resetting a PIN (forgotten PIN)
+
+**Members → find the member → Open → Reset PIN.** The old PIN stops working, the member is
+logged out everywhere, any lockout is cleared, and the new PIN appears on the PIN sheet to
+print.
+
+### Lockouts
+
+After 5 wrong PINs, an account locks for 15 minutes, then 1 hour, then 24 hours. A right PIN
+or 7 days without failures resets it. To unlock early: **Members → Open → Clear lockout**.
+
+### Recording a no-show and suspending a member
+
+- **Members → Open → Record a no-show**: the date, and an optional note (only admins see it).
+  Members see their own no-show dates for the last 12 months. No-shows are deleted after
+  12 months. Remove one only if it was recorded by mistake.
+- **Suspend from booking**: pick the last day (default 6 months from today) and give a reason
+  (required). This cancels the member's upcoming bookings, frees the slots, and logs each
+  cancelled booking. The member can still log in and look, and sees "Your booking access is
+  suspended until [date]. Contact management." To lift it early: **Lift suspension now**.
+
+### Courts, rooms and hours
+
+**Courts & rooms**: add, rename, set the order, or untick "Members can book it" to retire one
+(it's never deleted, because old bookings point at it). Hours are club time (New York), one box
+per day, like `09:00-12:00, 14:00-20:00`, on the quarter hour. An empty box means closed.
+
+### Admin bookings, leagues and events
+
+- **Schedule**: pick a court or room and a date to see who booked each slot. **Add an admin
+  booking** for closures or one-off events: no date limit, member rules don't apply, up to
+  30 days per booking. **Cancel this booking** works on any booking, even within 24 hours.
+  The member isn't told automatically, so let them know.
+- **Leagues**: one season = one court or room, one weekday, a start and end time, and a
+  first and last date (at most 12 months from today). Every free date is booked; dates that
+  clash with an existing booking are skipped and listed with who has them. When a season
+  ends, use **Renew season** to create the next one. **Cancel league** frees its future
+  dates. For two weekdays, create two leagues.
+- **Club events**: events at other places, shown to members on their Club events page.
+
+### The login alarm
+
+If failed logins across the club spike, the alarm switches on by itself. While it's on, every
+login is slowed, the login pages ask for a Cloudflare Turnstile check, and every admin page
+shows a red banner. The **Dashboard** shows its status, recent failed-login counts, and when
+it went on before. It switches off by itself after a while. The limits are private settings
+(see setup step 2).
 
 ## How changes go live
 
