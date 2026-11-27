@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My bookings – [Club name]</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav aria-label="Main">
+      <a href="/app" aria-current="page">My bookings</a>
+      <button type="button" class="link-button" data-logout>Log out</button>
+    </nav>
+  </header>
+  <main>
+    <h1>Welcome</h1>
+    <p class="lead">You're logged in as member <strong id="member-number">…</strong>.</p>
+    <p id="message" class="message" role="alert" hidden></p>
+  </main>
+  <footer>
+    <a href="/rules">Booking rules</a>
+  </footer>
+</body>
+</html>
