@@ -3,6 +3,7 @@
 // nightly clean-up. Every request comes here first (run_worker_first), so
 // every response gets the security headers.
 
+import { availabilityRoutes } from "./api/availability.js";
 import { memberAuthRoutes } from "./api/member-auth.js";
 import { withSecurityHeaders } from "./headers.js";
 import { json, methodNotAllowed, redirect } from "./http.js";
@@ -15,7 +16,7 @@ import { alarmUntil } from "./throttle.js";
 const READ_METHODS = new Set(["GET", "HEAD"]);
 
 /** Every /api route. Each module lists its own. */
-export const ROUTES = [...memberAuthRoutes];
+export const ROUTES = [...memberAuthRoutes, ...availabilityRoutes];
 
 const api = createRouter(ROUTES);
 
