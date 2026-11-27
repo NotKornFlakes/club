@@ -111,7 +111,7 @@ worker/
 - **No npm packages at runtime (my call).** The Worker uses only built-in Web APIs:
   `crypto.subtle`, `Intl` and `fetch`. npm is for development only: `wrangler` (local dev,
   bundling, migrations, types), `typescript` (type checking only), and `vitest` with
-  `@cloudflare/vitest-pool-workers` (tests). This keeps supply-chain risk close to zero for
+  `@cloudflare/vitest-plugin` (tests; formerly `vitest-pool-workers`). This keeps supply-chain risk close to zero for
   the code that runs live.
 - **Bundling.** Terraform's `content_file` takes one file, so CI runs
   `wrangler deploy --dry-run --outdir dist` to bundle `src/` into one file. Terraform
@@ -160,10 +160,12 @@ portfolio account. It is private:
   are off.
 - Everything in R2 is encrypted at rest with AES-256
   (developers.cloudflare.com/r2/reference/data-security/).
-- Only one token can read or write it: an R2 token with Object Read & Write on this one
-  bucket, stored as a GitHub environment secret.
-- The weekly drift check also confirms that public access is still off (my call; see
-  section 9).
+- Only two R2 tokens can reach it, both limited to this one bucket: Object Read & Write for
+  deploys (a `production` environment secret), and Object Read only for PR plans and the
+  drift check.
+- Terraform keeps the bucket's `r2.dev` address switched off
+  (`cloudflare_r2_managed_domain`), so the weekly drift check reports it if anyone turns it
+  on. A custom domain needs a zone, which the account doesn't have yet.
 
 The state never contains `PEPPER` or `IP_HASH_KEY`. It does contain the throttle settings,
 and possibly the Turnstile secret, which is one more reason it stays private.
@@ -697,8 +699,9 @@ The README will say so.
   personal (no PINs, tokens or member numbers).
 - **Infra PR:** whether the Turnstile secret goes through Terraform (it would then sit in
   state; low risk) or is set with wrangler like `PEPPER`.
-- **Infra PR:** the API call the drift check uses to confirm that the state bucket has no
-  `r2.dev` access and no custom domain, and the smallest token permission that can read it.
+- **Infra PR (done):** the state bucket's `r2.dev` setting is managed by Terraform
+  (`cloudflare_r2_managed_domain`, `enabled = false`). Token permission: Workers R2 Storage,
+  Edit to deploy and Read to plan.
 - **Infra PR:** the plan output in the Actions logs shows `(sensitive value)` for the
   throttle settings and the `LOGIN_LIMITER` limit, never the numbers.
 - **First migration PR:** `STRICT` tables and every trigger above behave as described in D1.

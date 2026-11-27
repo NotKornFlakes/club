@@ -1,0 +1,153 @@
+name: Deploy
+
+# Pull request -> terraform plan with a read-only token (preview only)
+# Merge to main -> waits for your approval (production environment), then
+#                  database migrations, then terraform apply
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "worker/**"
+      - ".github/workflows/deploy.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "worker/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two Terraform jobs at once. timeout-minutes on each job means a
+# hung run can't hold this group (and the state lock) forever.
+concurrency:
+  group: terraform
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+
+jobs:
+  plan:
+    name: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Read-only credentials (repository secrets): a Cloudflare token that can only
+    # read, and an R2 token that can only read the state bucket.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.PLAN_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.PLAN_R2_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.PLAN_CLOUDFLARE_API_TOKEN }}
+      HAS_PLAN_SECRETS: ${{ secrets.PLAN_CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - name: Skip until the read-only secrets exist
+        if: env.HAS_PLAN_SECRETS != 'true'
+        run: echo "::notice::Plan skipped. Add the PLAN_* repository secrets (see README) to preview changes on PRs."
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        if: env.HAS_PLAN_SECRETS == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: env.HAS_PLAN_SECRETS == 'true'
+        with:
+          node-version: 24
+
+      - name: Bundle the Worker
+        if: env.HAS_PLAN_SECRETS == 'true'
+        working-directory: worker
+        run: |
+          npm ci --no-fund
+          npm run build
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        if: env.HAS_PLAN_SECRETS == 'true'
+        with:
+          terraform_version: 1.17.1
+
+      - name: Init
+        if: env.HAS_PLAN_SECRETS == 'true'
+        working-directory: infra
+        run: terraform init
+
+      # -lock=false: a read-only token can't write the lock file. Plans change nothing.
+      - name: Plan
+        if: env.HAS_PLAN_SECRETS == 'true'
+        working-directory: infra
+        run: terraform plan -lock=false
+
+  apply:
+    name: apply
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Waits for your approval. Its secrets are only available to this job, on main.
+    environment: production
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Used by wrangler for the database migrations
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install and bundle the Worker
+        working-directory: worker
+        run: |
+          npm ci --no-fund
+          npm run build
+
+      # The wrapper is off so `terraform output -raw` prints only the value
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Init
+        working-directory: infra
+        run: terraform init
+
+      # Step 1: make sure the database exists (only does anything on the very first deploy)
+      - name: Database
+        working-directory: infra
+        run: terraform apply -auto-approve -lock-timeout=5m -target=cloudflare_d1_database.club
+
+      # Step 2: schema changes BEFORE new code, so each migration must still work with
+      # the code that's live now (add first, remove in a later PR)
+      - name: Database migrations
+        working-directory: worker
+        run: |
+          DB_ID="$(terraform -chdir=../infra output -raw d1_database_id)"
+          node scripts/remote-wrangler-config.mjs "$DB_ID" > wrangler.remote.json
+          npx wrangler d1 migrations apply DB --remote --config wrangler.remote.json
+
+      # Step 3: everything else (Worker code, pages, cron, workers.dev)
+      - name: Apply
+        working-directory: infra
+        run: terraform apply -auto-approve -lock-timeout=5m
+
+      # A green apply only proves Cloudflare accepted the config. This checks what
+      # visitors get. Set the SITE_URL variable after the first deploy (see README).
+      - name: Smoke test
+        if: vars.SITE_URL != ''
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: bash worker/scripts/smoke-test.sh "$SITE_URL"

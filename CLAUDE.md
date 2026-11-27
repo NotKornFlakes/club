@@ -144,6 +144,13 @@ Rules page linked in the footer:
 4. README: setup, issuing/resetting PINs, adding leagues, suspending a member,
    threat model, and a one-page "How to book" guide for members.
 5. Only cite official sources (developers.cloudflare.com, github.com, owasp.org).
+6. Claude never merges PRs, never approves PRs or deployments, and never changes repo
+   settings, rulesets, environments or secrets. Only the owner does these, in the GitHub web
+   UI. Claude may read settings (GET requests) to verify them.
+   Partly enforced by deny rules in `.claude/settings.json`. Where those can't match a
+   command, this rule is the only guard.
+7. Claude pushes only feature branches, always naming the branch
+   (`git push origin <branch>`), never `main`.
 
 ## Status
 - [x] Requirements agreed
