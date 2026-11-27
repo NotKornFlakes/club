@@ -4,6 +4,8 @@
 // every response gets the security headers.
 
 import { availabilityRoutes } from "./api/availability.js";
+import { bookingRoutes } from "./api/bookings.js";
+import { eventRoutes } from "./api/events.js";
 import { memberAuthRoutes } from "./api/member-auth.js";
 import { withSecurityHeaders } from "./headers.js";
 import { json, methodNotAllowed, redirect } from "./http.js";
@@ -16,7 +18,7 @@ import { alarmUntil } from "./throttle.js";
 const READ_METHODS = new Set(["GET", "HEAD"]);
 
 /** Every /api route. Each module lists its own. */
-export const ROUTES = [...memberAuthRoutes, ...availabilityRoutes];
+export const ROUTES = [...memberAuthRoutes, ...availabilityRoutes, ...bookingRoutes, ...eventRoutes];
 
 const api = createRouter(ROUTES);
 
