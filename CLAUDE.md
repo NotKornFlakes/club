@@ -15,8 +15,19 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - ONE Worker serves both the static pages and `/api/*` from a single origin
   (not Pages + Worker: SameSite=Strict cookies break across pages.dev/workers.dev,
   and Terraform can't upload Pages assets).
+- Static files are uploaded by Terraform itself: `cloudflare_workers_script` supports
+  `assets.directory` (checked in the provider docs on github.com, v5.29.0). No need to
+  bundle pages into the Worker script.
 - D1 database. Terraform with the Cloudflare provider.
-- Workers Paid plan ($5/month) needed for PIN hashing CPU time. [confirm with management]
+- Terraform state: a private R2 bucket in the club's Cloudflare account. Never public (no
+  r2.dev address, no custom domain); only a token scoped to that one bucket can read it.
+- Worker code: plain JavaScript with `// @ts-check` and JSDoc types, type-checked in CI
+  (`tsc --noEmit`). No compile step.
+- Done by hand, once (agreed): create the state bucket; set `PEPPER` and `IP_HASH_KEY` with
+  `wrangler secret put`. D1 migrations run through wrangler in the deploy job.
+- Workers Paid plan ($5/month) needed for PIN hashing CPU time: Free allows 10 ms CPU per
+  request, Paid defaults to 30 s (developers.cloudflare.com/workers/platform/limits/).
+  [confirm with management]
 - Worker sets all security headers itself until the custom domain/zone is added.
 - Plain HTML/CSS/JS, mobile-first, large buttons, simple wording.
 - Use the workers.dev URL until I add the club's domain at the end.
@@ -27,12 +38,20 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 
 ## Member login (no email, no signup)
 - Members already have member numbers. Login = member number + 6-digit PIN that I issue.
-- PINs: PBKDF2-SHA256 at 100,000 iterations (Workers limit; verify against Cloudflare docs)
-  PLUS a secret pepper stored as a Worker secret (never in D1 or the repo).
+- PINs: PBKDF2-SHA256 at 100,000 iterations PLUS a secret pepper stored as a Worker secret
+  (never in D1, the repo, or Terraform state). 100,000 is the Workers runtime's hard cap
+  (verified: github.com/cloudflare/workerd, `src/workerd/io/limit-enforcer.h`).
+- IP addresses (for rate limiting) are stored only as HMAC-SHA256 with a separate secret key,
+  `IP_HASH_KEY` (Worker secret, same handling as the pepper). Never raw, never a plain hash.
+- Both admins keep copies of the pepper and the IP-hash key in their password managers.
 - Lockouts are timed and escalating (15 min → 1 hour → 24 hours), never permanent.
   Admin can clear a lockout. Rate-limit per member number and per IP.
+  Accepted risk: anyone who knows a member number can lock that member out for up to 24 h.
 - Club-wide alarm: if failed logins spike, slow all logins, show warning on admin page,
   and show Cloudflare Turnstile on the login form only while the alarm is on.
+- Alarm thresholds (and the per-IP and flood-gate limits) are Worker settings. NEVER publish
+  their actual values: not in the repo, docs, README, PRs, commits or CI logs. Public text
+  says "configurable thresholds".
 - Session: secure, HttpOnly, SameSite=Strict cookie, 30-day expiry.
 - Disabling a member or resetting their PIN logs them out everywhere.
 - PIN sheets can only be printed at import/reset time (PINs are hashed; lost PIN = reset).
@@ -42,7 +61,8 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
   resource, in America/New_York local time (stays correct across DST).
 - 15-minute blocks; a booking is 1+ consecutive blocks, max 2 hours.
 - Max 2 upcoming bookings per member (a booking counts until it ends).
-- Book up to 1 month in advance.
+- Book up to 30 days ahead (rolling 30 days, not calendar months). Show it to members as
+  "up to 30 days ahead".
 - Booked slots show only "Taken". Never show names or member numbers to members.
 - Members can cancel their own booking up to 24 hours before start; not within 24 hours.
   Show this rule clearly before they confirm.
@@ -76,8 +96,11 @@ Rules page linked in the footer:
 ## Admin (me + one backup admin)
 - Separate admin login: strong password + TOTP 2FA. Separate cookie, 12-hour sessions.
 - Create/edit resources, hours, and club events.
-- Place bookings and recurring blocks (leagues) with no date limit, overriding member rules.
-  When a league block clashes with an existing member booking: skip that date and list
+- Place one-off bookings with no date limit, and recurring blocks (leagues), both
+  overriding member rules.
+- Every league has a season with an end date, at most 12 months out. I renew a season
+  when it ends.
+- When a league block clashes with an existing member booking: skip that date and list
   the clashes for me.
 - Admins can cancel any booking at any time, including within 24 hours.
 - See who booked each slot.
@@ -90,6 +113,8 @@ Rules page linked in the footer:
 - Store only: member number, optional display name (admin-only), hashed PIN, bookings,
   no-shows, suspensions. No emails or phone numbers.
 - Auto-delete bookings older than 12 months.
+- Auto-delete suspension records 12 months after the suspension ends (same as no-shows).
+  The audit log entry about the suspension stays for its full 24 months.
 - No analytics. No third-party scripts except Turnstile while the alarm is on.
 
 ## Security requirements
@@ -101,6 +126,9 @@ Rules page linked in the footer:
 - Cloudflare API token scoped as tightly as possible (separate account makes account-wide
   rights = this project only); stored as a GitHub Actions secret.
 - Branch ruleset + required reviewer on production environment (set up after first PR).
+- The threat model must say plainly: a 6-digit PIN has only 1,000,000 possible values. If
+  the D1 database ever leaked, hashing alone would not stop someone trying every PIN
+  offline. The pepper, kept outside D1, is what protects PINs in that case.
 
 ## Club details (to fill in)
 - Club name: [ ]
@@ -120,5 +148,7 @@ Rules page linked in the footer:
 ## Status
 - [x] Requirements agreed
 - [x] Repo created (public) and cloned
-- [ ] Architecture + D1 schema approved
+- [x] Brief committed to the repo
+- [x] Architecture + D1 schema approved 2026-11-26, with changes (`docs/architecture.md`)
+- [ ] Branch ruleset + `production` environment reviewer set up (before the first merge)
 - [ ] Build steps (see How to work)
