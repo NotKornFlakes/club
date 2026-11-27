@@ -115,7 +115,9 @@ npm run dev       # the site at http://localhost:8787 (Ctrl+C to stop)
 - `.dev.vars` holds local settings only and is never committed. Never put real secrets in it
   or in the example file: the live site's values are set on Cloudflare and kept out of the repo.
 - `npm run seed` wipes the local database and fills it with test data. Run it again any time
-  you want a fresh start.
+  you want a fresh start. It can only touch the local database: it refuses any option (such
+  as `--remote`), refuses if `CLOUDFLARE_ENV` is set or `wrangler.json` doesn't point at the
+  local placeholder database, and always runs wrangler with `--local`. Tests check this.
 
 ### Test accounts (local only)
 

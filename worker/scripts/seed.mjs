@@ -1,21 +1,33 @@
 // @ts-check
 // Resets the LOCAL database (worker/.wrangler) to known test data: 5 fake members, 1 test
-// admin, resources, hours, a few bookings and events. It only ever runs wrangler with
-// --local, and takes no options, so it can't be pointed at the live database.
+// admin, resources, hours, a few bookings and events.
+//
+// It can't reach the live database: seedCommands() (scripts/seed-data.js, tested in
+// test/seed.test.js) refuses any option, CLOUDFLARE_ENV, or a wrangler.json that isn't the
+// local placeholder, and builds the only two wrangler commands, both with --local.
+// Nothing here runs before those checks pass.
 //
 // Usage (with `npm run dev` stopped): npm run seed
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ensureDevVars } from "./dev-vars.mjs";
-import { SEED_ADMIN, SEED_MEMBERS, buildSeed, toSqlScript } from "./seed-data.js";
-
-if (process.argv.length > 2) {
-  console.error("npm run seed takes no options. It only ever writes to the local database.");
-  process.exit(1);
-}
+import { SEED_ADMIN, SEED_MEMBERS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
 
 const workerDir = new URL("..", import.meta.url);
 const wrangler = new URL("../node_modules/.bin/wrangler", import.meta.url).pathname;
+const file = new URL("../.wrangler/seed.sql", import.meta.url);
+const config = JSON.parse(readFileSync(new URL("../wrangler.json", import.meta.url), "utf8"));
+
+/** @type {[string[], string[]]} */
+let commands;
+try {
+  commands = seedCommands(process.argv.slice(2), config, file.pathname, process.env);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+const [migrate, load] = commands;
+
 /** @param {string[]} args */
 const run = (args) => execFileSync(wrangler, args, { cwd: workerDir, stdio: "inherit" });
 
@@ -25,13 +37,12 @@ if (!vars.PEPPER) {
   process.exit(1);
 }
 
-run(["d1", "migrations", "apply", "DB", "--local", "--force"]);
+run(migrate);
 
 const statements = await buildSeed({ pepper: vars.PEPPER, now: Math.floor(Date.now() / 1000) });
 mkdirSync(new URL("../.wrangler", import.meta.url), { recursive: true });
-const file = new URL("../.wrangler/seed.sql", import.meta.url);
 writeFileSync(file, toSqlScript(statements));
-run(["d1", "execute", "DB", "--local", "--file", file.pathname]);
+run(load);
 
 console.log("\nLocal test data is ready. Start the site with: npm run dev\n");
 console.log("Members (member number / PIN):");

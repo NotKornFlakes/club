@@ -3,7 +3,9 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptText, pepperKeys, verifySecret } from "../src/crypto.js";
-import { SEED_ADMIN, SEED_MEMBERS, buildSeed, toSqlScript } from "../scripts/seed-data.js";
+import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_MEMBERS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
+import seedScript from "../scripts/seed.mjs?raw";
+import wranglerConfig from "../wrangler.json";
 
 const db = env.DB;
 const PEPPER = "test-pepper-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -62,5 +64,60 @@ describe("local seed data", () => {
     expect(sql).toBe("INSERT INTO t VALUES (1, 'it''s', NULL);\n");
     expect(() => toSqlScript([{ sql: "SELECT ?", params: [] }])).toThrow(/mismatch/);
     expect(() => toSqlScript([{ sql: "SELECT 1", params: [1] }])).toThrow(/mismatch/);
+  });
+});
+
+describe("the seed can only reach the local database", () => {
+  const config = /** @type {{ d1_databases: Array<Record<string, unknown>> }} */ (wranglerConfig);
+  /** @param {Record<string, unknown>} changes */
+  const withDb = (changes) => ({ d1_databases: [{ ...config.d1_databases[0], ...changes }] });
+
+  it("the committed wrangler.json points at the local placeholder database", () => {
+    expect(config.d1_databases).toHaveLength(1);
+    expect(config.d1_databases[0]?.database_id).toBe(LOCAL_DATABASE_ID);
+    expect(() => seedCommands([], config, "/tmp/seed.sql", {})).not.toThrow();
+  });
+
+  it("runs only two wrangler commands, both --local with wrangler.json, never anything remote", () => {
+    const commands = seedCommands([], config, "/tmp/seed.sql", {});
+    expect(commands).toEqual([
+      ["d1", "migrations", "apply", "DB", "--local", "--config", "wrangler.json", "--force"],
+      ["d1", "execute", "DB", "--local", "--config", "wrangler.json", "--file", "/tmp/seed.sql"],
+    ]);
+    for (const command of commands) {
+      expect(command.join(" ")).not.toMatch(/--remote|--preview|--env|production/);
+    }
+  });
+
+  it.each([
+    [["--remote"]],
+    [["--preview"]],
+    [["--env", "production"]],
+    [["--config", "wrangler.remote.json"]],
+    [["--local"]],
+    [["anything"]],
+  ])("refuses to run with options %j", (args) => {
+    expect(() => seedCommands(args, config, "/tmp/seed.sql", {})).toThrow(/takes no options/);
+  });
+
+  it("refuses when CLOUDFLARE_ENV picks another environment", () => {
+    expect(() => seedCommands([], config, "/tmp/seed.sql", { CLOUDFLARE_ENV: "production" })).toThrow(/CLOUDFLARE_ENV/);
+  });
+
+  it.each([
+    ["a real database ID", withDb({ database_id: "3f2b1c4d-0000-4000-8000-123456789abc" })],
+    ["a database marked remote", withDb({ remote: true })],
+    ["a preview database", withDb({ preview_database_id: "3f2b1c4d-0000-4000-8000-123456789abc" })],
+    ["a second database", { d1_databases: [...config.d1_databases, { binding: "DB2", database_id: LOCAL_DATABASE_ID }] }],
+    ["no database", { d1_databases: [] }],
+  ])("refuses a wrangler.json with %s", (_label, changed) => {
+    expect(() => seedCommands([], changed, "/tmp/seed.sql", {})).toThrow(/local placeholder/);
+  });
+
+  it("the seed script runs wrangler only through those checked commands", () => {
+    expect(seedScript).toContain("seedCommands(process.argv.slice(2), config, file.pathname, process.env)");
+    expect(seedScript).not.toMatch(/--remote|--preview|--env/);
+    // run() is only ever called with the two checked commands.
+    expect([...seedScript.matchAll(/\brun\(([^)]*)\)/g)].map((m) => m[1])).toEqual(["migrate", "load"]);
   });
 });

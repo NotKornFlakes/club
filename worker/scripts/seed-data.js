@@ -163,3 +163,62 @@ export function toSqlScript(statements) {
     .join("\n")
     .concat("\n");
 }
+
+// ---------- Local-only guard ----------
+
+/** The placeholder database ID in wrangler.json. The live ID is never committed. */
+export const LOCAL_DATABASE_ID = "00000000-0000-0000-0000-000000000000";
+
+/** Flags that would make wrangler reach a database on Cloudflare, or pick other settings. */
+const FORBIDDEN_FLAGS = ["--remote", "--preview", "--env", "-e", "--persist-to"];
+
+/**
+ * The only two wrangler commands the seed runs: apply migrations, then load the data.
+ * Before returning them, it checks that they can only reach the local database, and throws
+ * (so nothing runs) if:
+ *   - the seed was given any option at all (e.g. --remote, --env, --config);
+ *   - CLOUDFLARE_ENV is set (it would pick another set of settings);
+ *   - wrangler.json's database isn't the local placeholder, or is marked remote.
+ * Both commands pass --local (wrangler then never contacts Cloudflare) and
+ * --config wrangler.json (so no other or redirected settings file is used).
+ * @param {string[]} args the seed's own command-line arguments
+ * @param {{ d1_databases?: Array<Record<string, unknown>> }} config the parsed wrangler.json
+ * @param {string} sqlFile path of the generated SQL file
+ * @param {Record<string, string | undefined>} env the environment variables
+ * @returns {[string[], string[]]}
+ */
+export function seedCommands(args, config, sqlFile, env) {
+  if (args.length > 0) {
+    throw new Error("npm run seed takes no options. It only ever writes to the local database.");
+  }
+  if (env.CLOUDFLARE_ENV) {
+    throw new Error("CLOUDFLARE_ENV is set. Unset it: the seed only ever writes to the local database.");
+  }
+  const databases = config.d1_databases ?? [];
+  const db = databases[0];
+  if (
+    databases.length !== 1 ||
+    !db ||
+    db.binding !== "DB" ||
+    db.database_id !== LOCAL_DATABASE_ID ||
+    db.remote !== undefined ||
+    db.preview_database_id !== undefined
+  ) {
+    throw new Error(
+      `wrangler.json's database must be the local placeholder (${LOCAL_DATABASE_ID}, not remote). ` +
+        "The seed refuses to run against anything else.",
+    );
+  }
+  const local = ["--local", "--config", "wrangler.json"];
+  /** @type {[string[], string[]]} */
+  const commands = [
+    ["d1", "migrations", "apply", "DB", ...local, "--force"],
+    ["d1", "execute", "DB", ...local, "--file", sqlFile],
+  ];
+  for (const command of commands) {
+    if (!command.includes("--local") || command.some((arg) => FORBIDDEN_FLAGS.includes(arg))) {
+      throw new Error("Refusing to run a seed command that isn't local-only.");
+    }
+  }
+  return commands;
+}
