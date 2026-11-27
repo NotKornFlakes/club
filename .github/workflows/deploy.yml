@@ -49,6 +49,8 @@ jobs:
       # and deploys all use the same ones). Terraform marks them sensitive in its output.
       TF_VAR_throttle_settings: ${{ secrets.THROTTLE_SETTINGS }}
       TF_VAR_login_flood_limit: ${{ secrets.LOGIN_FLOOD_LIMIT }}
+      # The site's hostname (not secret), for the Turnstile widget
+      TF_VAR_site_hostname: ${{ vars.SITE_HOSTNAME }}
       HAS_PLAN_SECRETS: ${{ secrets.PLAN_CLOUDFLARE_API_TOKEN != '' }}
     steps:
       - name: Skip until the read-only secrets exist
@@ -105,6 +107,8 @@ jobs:
       # and deploys all use the same ones). Terraform marks them sensitive in its output.
       TF_VAR_throttle_settings: ${{ secrets.THROTTLE_SETTINGS }}
       TF_VAR_login_flood_limit: ${{ secrets.LOGIN_FLOOD_LIMIT }}
+      # The site's hostname (not secret), for the Turnstile widget
+      TF_VAR_site_hostname: ${{ vars.SITE_HOSTNAME }}
       # Used by wrangler for the database migrations
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -153,9 +157,9 @@ jobs:
         run: terraform apply -auto-approve -lock-timeout=5m
 
       # A green apply only proves Cloudflare accepted the config. This checks what
-      # visitors get. Set the SITE_URL variable after the first deploy (see README).
+      # visitors get, at https://<SITE_HOSTNAME> (see README).
       - name: Smoke test
-        if: vars.SITE_URL != ''
+        if: vars.SITE_HOSTNAME != ''
         env:
-          SITE_URL: ${{ vars.SITE_URL }}
+          SITE_URL: https://${{ vars.SITE_HOSTNAME }}
         run: bash worker/scripts/smoke-test.sh "$SITE_URL"

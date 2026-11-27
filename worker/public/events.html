@@ -4,10 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Club events – [Club name]</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/events.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header class="topbar">
     <nav aria-label="Main">
       <a href="/app">My bookings</a>
@@ -16,7 +18,7 @@
       <button type="button" class="link-button" data-logout>Log out</button>
     </nav>
   </header>
-  <main>
+  <main id="main">
     <h1>Club events</h1>
     <p class="lead">Events at other places. For details or tickets, please ask management.</p>
     <p id="message" class="message" role="alert" hidden></p>

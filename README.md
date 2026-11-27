@@ -42,8 +42,8 @@ Done once, by the owner. Nothing here goes in the repo.
 
    | Token | Permissions (all "Account") | Goes in GitHub as |
    |---|---|---|
-   | Deploy | Workers Scripts: **Edit**, D1: **Edit**, Workers R2 Storage: **Edit** | `CLOUDFLARE_API_TOKEN` (production environment) |
-   | Plan (read-only) | Workers Scripts: **Read**, D1: **Read**, Workers R2 Storage: **Read** | `PLAN_CLOUDFLARE_API_TOKEN` (repository) |
+   | Deploy | Workers Scripts: **Edit**, D1: **Edit**, Workers R2 Storage: **Edit**, Turnstile: **Edit** | `CLOUDFLARE_API_TOKEN` (production environment) |
+   | Plan (read-only) | Workers Scripts: **Read**, D1: **Read**, Workers R2 Storage: **Read**, Turnstile: **Read** | `PLAN_CLOUDFLARE_API_TOKEN` (repository) |
 
 6. **R2 API tokens** (R2 → Manage API tokens → Create API token). **Apply to specific
    buckets only** → `club-tfstate`. Each gives an Access Key ID and a Secret Access Key.
@@ -74,12 +74,14 @@ Done once, by the owner. Nothing here goes in the repo.
   malformed, the live site refuses logins ("Login is temporarily unavailable") rather than
   guessing. The values in `worker/.dev.vars.example` and `worker/wrangler.json` are made-up
   local ones; don't reuse them.
-- **Repository variable:** `SITE_URL` = the workers.dev address, once the first deploy has
-  created it. It turns on the post-deploy smoke test.
+- **Repository variable:** `SITE_HOSTNAME` = the site's hostname, without `https://`:
+  `club-booking.<subdomain>.workers.dev` (the subdomain you picked in step 1). Terraform
+  limits the Turnstile check to this hostname, and the deploy's smoke test checks
+  `https://<SITE_HOSTNAME>` after every deploy.
 - **Ruleset:** once CI has run on a PR, add the required status checks `worker`, `infra`,
   `secrets` and `dependencies` to the `main` ruleset.
 
-### 3. Secret keys (before the member-login PR)
+### 3. Secret keys (once, after the first deploy has created the Worker)
 
 Two Worker secrets, each 32 random bytes, set once by hand. They are never stored in the
 repo, the database or Terraform state, and Terraform is told to leave them alone. **Both
@@ -94,6 +96,17 @@ npx wrangler secret put PEPPER  # paste it when asked
 openssl rand -base64 32         # a different value: save it as IP_HASH_KEY
 npx wrangler secret put IP_HASH_KEY
 ```
+
+Then the Turnstile secret. Terraform creates the Turnstile widget. Copy its secret key from
+the Cloudflare dashboard (**Turnstile → Club booking login → Settings**) and set it the same
+way. Until it's set, logins still work, but while the club-wide alarm is on they'd be refused.
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET   # paste the widget's secret key
+```
+
+Until `PEPPER`, `IP_HASH_KEY` and the throttle secrets are set, the live site refuses all
+logins ("Login is temporarily unavailable"). That's on purpose.
 
 ## Running the club (admin how-tos)
 
@@ -173,6 +186,11 @@ shows a red banner. The **Dashboard** shows its status, recent failed-login coun
 it went on before. It switches off by itself after a while. The limits are private settings
 (see setup step 2).
 
+You can also **Turn alarm on now** (to test Turnstile, or if you see an attack starting) and
+**Turn alarm off** after a false alarm. Both go in the audit log. **Before launch, test it
+once on the live site:** turn it on, open the login page, check the Turnstile box appears
+and you can log in, then turn it off.
+
 ## How changes go live
 
 1. A PR runs CI (tests, type check, code rules, Terraform checks, Checkov, zizmor, secret and
@@ -235,8 +253,96 @@ npm run rules     # code rules: parameterized SQL, no innerHTML, no INSERT OR RE
 
 ## Threat model
 
-The short version is in [docs/architecture.md, section 11](docs/architecture.md#11-threat-model-short-version-the-readme-gets-the-full-one).
-The full one arrives here with the hardening PR. The key point, said plainly: a 6-digit PIN
-has only 1,000,000 possible values, so if the database ever leaked, hashing alone would not
-stop someone trying every PIN offline. The pepper, kept outside the database, is what
-protects PINs in that case.
+What we protect: members' bookings and PINs, the admin accounts, and the little personal data
+we keep (member numbers, optional admin-only names, bookings, no-shows, suspensions). There
+are no emails, phone numbers or payment details.
+
+### Said plainly: a 6-digit PIN is weak on its own
+
+A 6-digit PIN has only **1,000,000** possible values. If the database ever leaked, hashing
+alone would not stop someone trying every PIN offline. Even at 100,000 rounds of PBKDF2 (the
+most the Workers runtime allows), one modern graphics card can try all of them for a member
+in seconds to minutes. **The pepper, kept outside the database, is what protects PINs in that
+case.** Every PIN is mixed with a secret key (`PEPPER`) before hashing. That key is a Worker
+secret, never in the database, the repo or Terraform state. Without it, a stolen database
+gives an attacker nothing to start guessing with. If the pepper and the database leak
+together, assume every PIN is known: set a new pepper and reissue every PIN.
+
+Online, PINs are protected by throttling, so guessing through the website is slow and
+noisy (see the table).
+
+### Defences
+
+| Threat | Main defences | What's left |
+|---|---|---|
+| Guessing one member's PIN online | 5 tries, then locks of 15 min / 1 h / 24 h; per-IP block; club-wide alarm | About 1,800 guesses a year at most: roughly a 0.2% chance per targeted member per year. |
+| Trying one PIN across many members | Per-IP block (IPv6 counted per /64); club-wide alarm with configurable short- and long-window thresholds slows every login and requires Turnstile; admins see it on every page | An attacker who stays under the alarm's limits gets only that many guesses a day across the whole club. The limits set their odds, which is why their values are kept private. |
+| Flooding the login to run up the bill | Flood gate (rate limiter) runs before any hashing; the Workers spending limit | |
+| Locking a member out on purpose | Locks are timed, never permanent; an admin can clear one | **Accepted risk:** anyone who knows a member number can lock that member out for up to 24 hours. |
+| Database copy leaks | Pepper (above); session tokens stored only as SHA-256; authenticator keys encrypted (AES-GCM, key from the pepper); IPs stored only as HMACs with a separate key, `IP_HASH_KEY` | See "Said plainly". If `IP_HASH_KEY` leaks with the database, the IPs behind the last 7 days of failed logins could be worked out; replace it. |
+| Stolen member login | A member login can only see "Taken" slots, book or cancel that member's own bookings, and see their own no-show dates | The thief can act as that member until the PIN is reset (which logs them out everywhere). |
+| Admin account takeover | Password of 16+ characters plus an authenticator code (each code works once); lockout; 12-hour sessions; every action in the audit log | A phished password plus a live code. Use a password manager, which won't fill in on a fake site. |
+| Someone else's page making changes (CSRF) | Every change must come from our own Origin, be JSON, and carry the session's CSRF token; cookies are `SameSite=Strict` | |
+| Script injection (XSS) | Strict Content Security Policy (only our own scripts, no inline code); pages build text with `textContent` only; CI fails on `innerHTML` and inline scripts | |
+| Clickjacking | `frame-ancestors 'none'` and `X-Frame-Options: DENY` | |
+| SQL injection | Every query uses `prepare(...).bind(...)`; CI fails on SQL built from strings | |
+| Double booking | The database refuses it (one row per 15-minute slot, unique key, filled by a trigger), even if two members tap at once | |
+| Bad dependency | No npm packages run in the live site; lockfile; Dependabot; actions pinned to commits; `npm audit` and dependency review in CI | Development tools in CI. |
+| GitHub or Cloudflare account takeover | Two-factor login on both; required reviewer on the `production` environment; tightly scoped API tokens; a separate Cloudflare account for the club | |
+| Members sharing PINs | The booking rules say not to | Can't be prevented technically. |
+
+Out of scope: Cloudflare itself being compromised, and malware on a member's phone.
+
+### Secrets: where they live
+
+| Secret | Where | If lost | If leaked |
+|---|---|---|---|
+| `PEPPER` | Worker secret + both admins' password managers | Every PIN and admin password stops working: new pepper, reissue PINs, re-enrol admins | With the database: reissue every PIN |
+| `IP_HASH_KEY` | Worker secret + both password managers | Set a new one; per-IP counts restart | With the database: replace it |
+| `TURNSTILE_SECRET` | Worker secret (and Terraform state) | Copy it again from the dashboard | Rotate the widget's secret in the dashboard |
+| Throttle settings | GitHub repository secrets, Terraform state | Choose new values | Choose new values |
+| Cloudflare and R2 tokens | GitHub secrets | Make new ones | Revoke in Cloudflare at once |
+
+Terraform state sits in a private R2 bucket that only the two scoped R2 tokens can read.
+
+### Privacy and retention
+
+The nightly job deletes bookings 12 months after they end, no-shows 12 months after their
+date, suspensions 12 months after they end, leagues and events 12 months after they finish,
+login failures after 7 days, and audit entries after 24 months. D1 Time Travel can still
+restore deleted data for up to 30 days. No analytics, and no third-party scripts except
+Turnstile while the alarm is on.
+
+## How to book: a guide for members
+
+*One page you can print or send to members. Replace the bracketed parts with the club's details.*
+
+> ### Booking the court and rooms at [Club name]
+>
+> **You need:** your member number, and the 6-digit PIN the club gave you. Keep your PIN
+> private; it's for you only.
+>
+> **1. Log in.** Go to **[site address]** and tap **Member login**. Type your member number
+> and PIN, then tap **Log in**. You stay logged in on that phone or computer for 30 days.
+>
+> **2. Book.** Tap **Book**. Choose the court or room, then the day (up to 30 days ahead).
+> Free times show **Free**; times someone else has booked show **Taken**. Tap the time you
+> want to start, then choose how long (15 minutes up to 2 hours).
+>
+> **3. Agree to the rules.** Read the booking rules, tick **I agree**, and tap **Book it**.
+>
+> **4. Add it to your calendar.** Tap **Add to calendar** to get a reminder 1 hour before.
+>
+> **Good to know**
+> - You can have up to **2 upcoming bookings** at a time.
+> - **Cancelling:** go to **My bookings** and tap **Cancel booking**. You can cancel up to
+>   **24 hours** before the start. After that, the booking can't be cancelled. If you can't
+>   make it, please let management know.
+> - **Missed bookings** are recorded by management. You can see yours under **My bookings**.
+>   Members who miss 3 bookings may lose booking privileges for 6 months.
+> - **Wrong PIN 5 times?** Your account locks for 15 minutes (then longer if it happens
+>   again). Wait, or ask management to unlock it.
+> - **Forgot your PIN?** Ask management for a new one.
+> - **Club events** at other places are listed under **Club events**.
+>
+> Questions? Contact **[contact details]**.

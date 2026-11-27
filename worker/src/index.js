@@ -76,7 +76,9 @@ async function route(request, env) {
     const turnstile = (await alarmUntil(env.DB, now)) !== null;
     return { response: await env.ASSETS.fetch(request), noStore: true, turnstile };
   }
-  return { response: await env.ASSETS.fetch(request), noStore: access === "member" || access === "admin" };
+  // Private pages and every admin page (including setup) are never cached.
+  const noStore = access === "member" || access === "admin" || page === "/admin" || page.startsWith("/admin/");
+  return { response: await env.ASSETS.fetch(request), noStore };
 }
 
 /** @type {ExportedHandler<Env>} */

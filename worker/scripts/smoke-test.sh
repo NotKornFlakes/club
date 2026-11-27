@@ -35,7 +35,12 @@ check() {
 
 check / 200
 check /rules 200
+check /login 200
+check /admin/login 200
 check /api/health 200
+check /api/login-status 200
+check /app 302          # private page: logged-out visitors go to the login page
+check /api/me 401       # private API: needs a login
 check /no-such-page 404
 
 if [ "$failed" -ne 0 ]; then
