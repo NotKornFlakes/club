@@ -7,7 +7,7 @@
 // the hashes are made with the fake PEPPER from .dev.vars, not the real one.
 
 import { encryptText, hashSecret, pepperKeys } from "../src/crypto.js";
-import { addDays, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
+import { addDays, addMonths, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
 
 /** Fake members. Member numbers and PINs are made up and exist only in local test data. */
 export const SEED_MEMBERS = Object.freeze([
@@ -107,7 +107,7 @@ export async function buildSeed({ pepper, now }) {
   const memberBookings = [
     { member: 1, resource: 1, start: soon, end: soon + 3600 },
     { member: 5, resource: 1, start: at(1, "18:00"), end: at(1, "19:00") },
-    { member: 4, resource: 2, start: at(2, "10:00"), end: at(2, "11:30") },
+    { member: 3, resource: 2, start: at(2, "10:00"), end: at(2, "11:30") },
   ];
   for (const b of memberBookings) {
     out.push({
@@ -120,6 +120,20 @@ export async function buildSeed({ pepper, now }) {
     sql: `INSERT INTO bookings (resource_id, kind, label, starts_at, ends_at, created_at, created_by_admin_id)
           VALUES (1, 'admin', 'Floor maintenance', ?, ?, ?, ?)`,
     params: [at(3, "09:00"), at(3, "12:00"), now, SEED_ADMIN.id],
+  });
+
+  // Member 1003 has two no-shows on record; member 1004 is suspended (so has no bookings).
+  for (const [days, note] of [[-20, "Court booked, nobody came."], [-75, null]]) {
+    out.push({
+      sql: "INSERT INTO no_shows (member_id, on_date, note, recorded_by_admin_id, recorded_at) VALUES (3, ?, ?, ?, ?)",
+      params: [addDays(today, Number(days)), note, SEED_ADMIN.id, now],
+    });
+  }
+  const suspendedUntil = addMonths(today, 2);
+  out.push({
+    sql: `INSERT INTO suspensions (member_id, starts_at, ends_at, reason, created_by_admin_id, created_at)
+          VALUES (4, ?, ?, '3 missed bookings (test data)', ?, ?)`,
+    params: [now, clubTimeToUtc(addDays(suspendedUntil, 1), "00:00"), SEED_ADMIN.id, now],
   });
 
   const events = [

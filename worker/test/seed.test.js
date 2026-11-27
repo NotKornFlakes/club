@@ -42,15 +42,26 @@ describe("local seed data", () => {
     expect(await verifySecret("111111", String(row?.pin_hash), other)).toBe(false);
   });
 
-  it("has resources, hours, bookings (with their slots) and events", async () => {
+  it("has resources, hours, bookings (with their slots), events, no-shows and a suspension", async () => {
     const counts = await db
       .prepare(
         `SELECT (SELECT COUNT(*) FROM resources) AS resources, (SELECT COUNT(*) FROM opening_hours) AS hours,
                 (SELECT COUNT(*) FROM bookings) AS bookings, (SELECT COUNT(*) FROM booking_slots) AS slots,
-                (SELECT COUNT(*) FROM club_events) AS events`,
+                (SELECT COUNT(*) FROM club_events) AS events, (SELECT COUNT(*) FROM no_shows) AS no_shows,
+                (SELECT COUNT(*) FROM suspensions) AS suspensions,
+                (SELECT COUNT(*) FROM bookings WHERE member_id = 4) AS suspended_member_bookings`,
       )
       .first();
-    expect(counts).toEqual({ resources: 3, hours: 7 + 6 + 10, bookings: 4, slots: 4 + 4 + 6 + 12, events: 2 });
+    expect(counts).toEqual({
+      resources: 3,
+      hours: 7 + 6 + 10,
+      bookings: 4,
+      slots: 4 + 4 + 6 + 12,
+      events: 2,
+      no_shows: 2,
+      suspensions: 1,
+      suspended_member_bookings: 0,
+    });
   });
 
   it("can be applied twice (it resets the data first)", async () => {

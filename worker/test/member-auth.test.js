@@ -85,7 +85,7 @@ describe("logging in", () => {
     const response = await session.get("/api/me");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const me = await response.json();
-    expect(me).toEqual({ member_number: member.number, csrf_token: session.csrf });
+    expect(me).toEqual({ member_number: member.number, csrf_token: session.csrf, suspension: null, no_shows: [] });
     expect(session.csrf).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 

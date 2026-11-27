@@ -1,7 +1,7 @@
 // @ts-check
 // The Book page: pick a court or room, a day, a start time and a length, agree to the
 // rules, and book. Taken slots say only "Taken"; the server never sends who booked.
-import { ApiError, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, say, wireLogout } from "./common.js";
+import { ApiError, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
 import { RULES } from "./rules.js";
 
 wireLogout();
@@ -199,6 +199,13 @@ function moveDay(days) {
 
 async function start() {
   try {
+    const member = await me();
+    if (member.suspension) {
+      // Suspended members can look, but not book.
+      say(byId("suspended"), member.suspension.message);
+      byId("pick").hidden = true;
+      return;
+    }
     const data = await api("/api/resources");
     state.first = data.first_date;
     state.last = data.last_date;
