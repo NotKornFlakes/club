@@ -117,3 +117,15 @@ export function nextSlot(unixSeconds) {
 export function daysBetween(from, to) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / (DAY_SECONDS * 1000));
 }
+
+/**
+ * The same day-of-month some months later (or the month's last day if it's shorter).
+ * @param {string} date YYYY-MM-DD @param {number} months
+ */
+export function addMonths(date, months) {
+  const [y, mo, d] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(y ?? 0, (mo ?? 1) - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d ?? 1, lastDay));
+  return target.toISOString().slice(0, 10);
+}
