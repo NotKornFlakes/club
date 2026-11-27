@@ -8,9 +8,9 @@ import { decryptText, encryptText, hashIp, hashSecret, pepperKeys, textEqual, ve
 import { HttpError, clientIp, json } from "../http.js";
 import { ADMIN_COOKIE, clearCookie, createAdminSession } from "../sessions.js";
 import { throttleSettings } from "../settings.js";
-import { alarmUntil, claimAttempt, clearLock, guardLogin, lockedError, lockedUntil, recordFailure } from "../throttle.js";
+import { ALARM_KEY, alarmUntil, claimAttempt, clearLock, guardLogin, lockedError, lockedUntil, recordFailure } from "../throttle.js";
 import { newTotpSecret, otpauthUri, verifyTotp } from "../totp.js";
-import { onlyFields, optionalStr, str } from "../validate.js";
+import { bool, onlyFields, optionalStr, str } from "../validate.js";
 
 /** @typedef {import("../router.js").Ctx} Ctx */
 /** @typedef {import("../router.js").Route} Route */
@@ -35,7 +35,7 @@ async function guard(ctx) {
   const settings = throttleSettings(ctx.env.THROTTLE_SETTINGS);
   const keys = await pepperKeys(ctx.env.PEPPER);
   const ipHash = await hashIp(clientIp(ctx.request), ctx.env.IP_HASH_KEY);
-  const turnstileToken = optionalStr(ctx.body, "turnstile_token", { max: 4096 });
+  const turnstileToken = optionalStr(ctx.body, "turnstile_token", { max: 2048 });
   await guardLogin({ env: ctx.env, ipHash, settings, now: ctx.now, turnstileToken });
   return { settings, keys, ipHash };
 }
@@ -149,7 +149,7 @@ async function me(ctx) {
   const admin = /** @type {import("../sessions.js").AdminSession} */ (ctx.admin);
   const until = await alarmUntil(ctx.env.DB, ctx.now);
   const { results } = await ctx.env.DB.prepare(
-    "SELECT at, details FROM audit_log WHERE action = 'login_alarm.on' ORDER BY at DESC LIMIT 10",
+    "SELECT at, action, details FROM audit_log WHERE action IN ('login_alarm.on', 'login_alarm.manual_on') ORDER BY at DESC LIMIT 10",
   ).all();
   const failures = await ctx.env.DB.prepare(
     "SELECT (SELECT COUNT(*) FROM login_failures WHERE at > ?1) AS hour, (SELECT COUNT(*) FROM login_failures WHERE at > ?2) AS day",
@@ -160,13 +160,38 @@ async function me(ctx) {
     username: admin.username,
     csrf_token: admin.csrfToken,
     alarm: { on: until !== null, until },
-    alarm_history: results.map((r) => ({ at: Number(r.at), ...JSON.parse(String(r.details)) })),
+    alarm_history: results.map((r) => ({
+      at: Number(r.at),
+      window: r.action === "login_alarm.manual_on" ? "manual" : String(JSON.parse(String(r.details)).window),
+    })),
     failed_logins: { last_hour: Number(failures?.hour ?? 0), last_day: Number(failures?.day ?? 0) },
   });
 }
 
+/**
+ * Turns the club-wide alarm on now (for the usual hold time) or off early. Useful to test
+ * Turnstile on the live site, or to act on an attack before it crosses the limits.
+ * @param {Ctx} ctx
+ */
+async function setAlarm(ctx) {
+  onlyFields(ctx.body, ["on"]);
+  const on = bool(ctx.body, "on");
+  const settings = throttleSettings(ctx.env.THROTTLE_SETTINGS);
+  const until = on ? ctx.now + settings.alarm_hold_minutes * 60 : ctx.now;
+  const adminId = /** @type {import("../sessions.js").AdminSession} */ (ctx.admin).adminId;
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare(
+      `INSERT INTO system_state (key, value, updated_at) VALUES (?1, ?2, ?3)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).bind(ALARM_KEY, String(until), ctx.now),
+    auditEntry(ctx.env.DB, { at: ctx.now, adminId, action: on ? "login_alarm.manual_on" : "login_alarm.off", details: on ? { until } : {} }),
+  ]);
+  return json({ on, until: on ? until : null });
+}
+
 /** @type {Route[]} */
 export const adminAuthRoutes = [
+  { method: "POST", path: "/api/admin/alarm", access: "admin", handler: setAlarm },
   { method: "POST", path: "/api/admin/setup/start", access: "public", handler: setupStart },
   { method: "POST", path: "/api/admin/setup", access: "public", handler: setupFinish },
   { method: "POST", path: "/api/admin/login", access: "public", handler: login },

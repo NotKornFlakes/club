@@ -4,10 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Leagues – Admin – [Club name]</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/admin/leagues.js"></script>
 </head>
 <body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header class="topbar">
     <nav aria-label="Admin">
       <a href="/admin/">Dashboard</a>
@@ -21,7 +23,7 @@
     </nav>
   </header>
   <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
-  <main>
+  <main id="main">
     <h1>Leagues</h1>
     <p class="lead">A league books the same time every week for one season (at most 12 months).
       Dates that clash with an existing booking are skipped and listed.</p>

@@ -14,6 +14,16 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
+variable "site_hostname" {
+  description = "The site's hostname, e.g. club-booking.<subdomain>.workers.dev. From the SITE_HOSTNAME GitHub variable. Turnstile only works there."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.site_hostname))
+    error_message = "site_hostname must be a plain hostname like club-booking.example.workers.dev (no https://, no path)."
+  }
+}
+
 variable "state_bucket_name" {
   description = "The R2 bucket that holds Terraform state (created by hand once; see README)."
   type        = string
