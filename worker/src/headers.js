@@ -15,6 +15,14 @@ export const CSP = [
   "base-uri 'none'",
 ].join("; ");
 
+/**
+ * The login pages' CSP while the club-wide alarm is on: the same, plus Cloudflare
+ * Turnstile's script and challenge frame. Never used otherwise.
+ */
+export const CSP_WITH_TURNSTILE = CSP.replace("script-src 'self'", "script-src 'self' https://challenges.cloudflare.com").concat(
+  "; frame-src https://challenges.cloudflare.com",
+);
+
 /** @type {Readonly<Record<string, string>>} */
 export const SECURITY_HEADERS = Object.freeze({
   "Content-Security-Policy": CSP,
@@ -32,13 +40,17 @@ export const SECURITY_HEADERS = Object.freeze({
  * Responses from fetch() have read-only headers, so we always copy.
  *
  * @param {Response} response
- * @param {{ noStore?: boolean }} [options] noStore: forbid caching (API answers, private pages)
+ * @param {{ noStore?: boolean, turnstile?: boolean }} [options] noStore: forbid caching (API answers,
+ *   private pages); turnstile: allow Turnstile in the CSP (login pages while the alarm is on)
  * @returns {Response}
  */
 export function withSecurityHeaders(response, options = {}) {
   const out = new Response(response.body, response);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     out.headers.set(name, value);
+  }
+  if (options.turnstile) {
+    out.headers.set("Content-Security-Policy", CSP_WITH_TURNSTILE);
   }
   if (options.noStore) {
     out.headers.set("Cache-Control", "no-store");

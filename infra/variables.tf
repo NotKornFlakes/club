@@ -19,3 +19,41 @@ variable "state_bucket_name" {
   type        = string
   default     = "club-tfstate"
 }
+
+# ---------- Login throttling (values are private) ----------
+# Supplied from GitHub secrets. Never put real values in this repo: not here, not in docs,
+# not in commit messages. Terraform hides them in plan output because they're sensitive.
+
+variable "throttle_settings" {
+  description = "Login throttle settings as one JSON object (per-IP limit, alarm limits, hold time, delay). From the THROTTLE_SETTINGS GitHub secret."
+  type        = string
+  sensitive   = true
+
+  # Checks the shape only, so a failed check reveals nothing about the values.
+  validation {
+    condition = can(jsondecode(var.throttle_settings)) && try(
+      sort(keys(jsondecode(var.throttle_settings))) == sort([
+        "alarm_delay_ms",
+        "alarm_hold_minutes",
+        "alarm_long_failures",
+        "alarm_short_failures",
+        "alarm_short_minutes",
+        "ip_failures_per_hour",
+      ]) &&
+      alltrue([for value in values(jsondecode(var.throttle_settings)) : floor(value) == value && value >= 1]),
+      false
+    )
+    error_message = "throttle_settings must be a JSON object with exactly the six expected keys, each a positive whole number (see README)."
+  }
+}
+
+variable "login_flood_limit" {
+  description = "Flood gate: logins allowed per IP per 60 seconds before requests are dropped. From the LOGIN_FLOOD_LIMIT GitHub secret."
+  type        = number
+  sensitive   = true
+
+  validation {
+    condition     = floor(var.login_flood_limit) == var.login_flood_limit && var.login_flood_limit >= 1
+    error_message = "login_flood_limit must be a positive whole number."
+  }
+}

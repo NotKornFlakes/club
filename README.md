@@ -59,6 +59,21 @@ Done once, by the owner. Nothing here goes in the repo.
   home), plus the three `PLAN_*` secrets above.
 - **`production` environment secrets:** `CLOUDFLARE_API_TOKEN`, `R2_ACCESS_KEY_ID`,
   `R2_SECRET_ACCESS_KEY`. Only the approved deploy job on `main` can read these.
+- **Login throttle secrets (repository secrets):** pick your own values and keep them
+  private. Never write them in the repo, an issue, a PR or a commit message. Save a copy in
+  your password manager.
+  - `LOGIN_FLOOD_LIMIT`: logins allowed per IP per 60 seconds before requests are dropped
+    (one whole number).
+  - `THROTTLE_SETTINGS`: one line of JSON with exactly these keys, each a positive whole
+    number: `ip_failures_per_hour`, `alarm_short_minutes`, `alarm_short_failures`,
+    `alarm_long_failures` (per 24 hours), `alarm_hold_minutes`, `alarm_delay_ms`.
+
+  They're repository secrets, not `production` ones, so PR plans, the weekly drift check and
+  deploys all use the same values. Terraform marks them sensitive, so plan output in the
+  public Actions logs shows `(sensitive value)`, never the numbers. If either is missing or
+  malformed, the live site refuses logins ("Login is temporarily unavailable") rather than
+  guessing. The values in `worker/.dev.vars.example` and `worker/wrangler.json` are made-up
+  local ones; don't reuse them.
 - **Repository variable:** `SITE_URL` = the workers.dev address, once the first deploy has
   created it. It turns on the post-deploy smoke test.
 - **Ruleset:** once CI has run on a PR, add the required status checks `worker`, `infra`,

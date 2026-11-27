@@ -237,10 +237,13 @@ alarm's limits, hold time and delay are Worker settings, not code. Their values 
 deliberately not published, in this document or anywhere in the repo, so nobody can tune an
 attack to stay just under them. How that works:
 
-- The values sit in one Terraform variable, marked `sensitive`, supplied from a GitHub
-  environment secret. Terraform then hides them in plan output, which matters because
-  Actions logs on a public repo can be read by anyone. Terraform passes them to the Worker as
-  the `THROTTLE_SETTINGS` binding and the `LOGIN_LIMITER` limit.
+- The values sit in two Terraform variables, marked `sensitive`, supplied from GitHub
+  repository secrets (`THROTTLE_SETTINGS`, `LOGIN_FLOOD_LIMIT`). *Changed in the member-login
+  PR from "environment secret": the PR plan and the weekly drift check need the same values
+  as the deploy, or every plan would show a difference.* Terraform then hides them in plan
+  output, which matters because Actions logs on a public repo can be read by anyone.
+  Terraform passes them to the Worker as the `THROTTLE_SETTINGS` binding and the
+  `LOGIN_LIMITER` limit.
 - Terraform checks their shape (positive whole numbers, all keys present) without the check
   itself revealing them.
 - If the setting is missing or invalid, the Worker refuses logins with "Login is temporarily
@@ -737,9 +740,9 @@ Same pattern as the portfolio repo, with every action pinned to a commit SHA.
 - **GitHub secret scanning and push protection** turned on for the repo (free for public
   repos).
 
-Secrets in GitHub, all in the `production` environment: the Cloudflare API token, the R2
-state keys (that bucket only), and the throttle settings. The account ID is stored as a
-variable.
+Secrets in GitHub: in the `production` environment, the deploy Cloudflare API token and the
+R2 state keys (that bucket only); as repository secrets, the read-only plan tokens, the
+account ID and the two throttle settings (so plans and deploys agree).
 
 ## 11. Threat model (short version; the README gets the full one)
 

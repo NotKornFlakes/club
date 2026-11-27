@@ -56,6 +56,22 @@ resource "cloudflare_workers_script" "club" {
       type = "assets"
       name = local.worker.assets.binding
     },
+    # Login throttling. Values are private: sensitive variables from GitHub secrets.
+    {
+      type = "plain_text"
+      name = "THROTTLE_SETTINGS"
+      text = var.throttle_settings
+    },
+    # Flood gate: drops a burst of logins from one IP before any hashing.
+    {
+      type         = "ratelimit"
+      name         = "LOGIN_LIMITER"
+      namespace_id = "1001"
+      simple = {
+        limit  = var.login_flood_limit
+        period = 60
+      }
+    },
   ]
 
   # Keep secrets set by hand with `wrangler secret put` (PEPPER, IP_HASH_KEY), so
