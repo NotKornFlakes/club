@@ -94,18 +94,49 @@ npx wrangler secret put IP_HASH_KEY
 
 Never run `wrangler deploy`. Terraform owns the Worker.
 
-## Local development
+## Run it locally
+
+You can try the whole site on your own computer. Nothing here talks to Cloudflare: the
+database is a local file in `worker/.wrangler/`, and the secrets are made-up values.
+
+**You need:** Node.js 24 or newer, and Firefox or Chrome (they allow the site's secure login
+cookies on `http://localhost`; Safari doesn't).
 
 ```bash
 cd worker
-npm ci            # exact versions from package-lock.json
-npm test          # all tests, in the real Workers runtime
-npm run typecheck
-npm run rules     # code rules: parameterized SQL, no innerHTML, no INSERT OR REPLACE
-npm run dev       # the site at http://localhost:8787, with a local database
+npm ci            # install the exact tool versions from package-lock.json
+npm run seed      # reset the local database to test data (run it with the site stopped)
+npm run dev       # the site at http://localhost:8787 (Ctrl+C to stop)
 ```
 
-For a local database with the schema: `npx wrangler d1 migrations apply DB --local`.
+- `npm run dev` first creates `worker/.dev.vars` from
+  [`worker/.dev.vars.example`](worker/.dev.vars.example) if it's missing, applies the
+  database migrations to the local database, then starts the site.
+- `.dev.vars` holds local settings only and is never committed. Never put real secrets in it
+  or in the example file: the live site's values are set on Cloudflare and kept out of the repo.
+- `npm run seed` wipes the local database and fills it with test data. Run it again any time
+  you want a fresh start.
+
+### Test accounts (local only)
+
+| Who | Log in with |
+|---|---|
+| Members | member numbers `1001` to `1005`; the PIN is the last digit six times (`1001` → `111111`, `1002` → `222222`, ...) |
+| Admin | username `admin`, password `local-test-only-admin`, and the code from `npm run totp` |
+
+These accounts can't work on the live site, even by mistake. Their PINs and password are
+hashed with the fake pepper from `.dev.vars`, so they don't match under the real one.
+
+The seed data also has three resources (a court and two rooms) with opening hours, a few
+bookings, so you can see "Taken" slots, and two club events.
+
+### Checks
+
+```bash
+npm test          # all tests, in the real Workers runtime against a local database
+npm run typecheck # type check (// @ts-check + JSDoc)
+npm run rules     # code rules: parameterized SQL, no innerHTML, no INSERT OR REPLACE
+```
 
 ## Threat model
 

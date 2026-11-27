@@ -1,0 +1,24 @@
+# Local settings for `npm run dev` and `npm run seed`. ALL VALUES ARE MADE UP.
+# `npm run dev` copies this file to .dev.vars (gitignored) the first time it runs.
+#
+# Never put real values here or in .dev.vars. The live site's PEPPER, IP_HASH_KEY and
+# throttle settings are different, are set on Cloudflare (see README), and are never
+# written down in this repo.
+
+# Mixed into every PIN and admin password before hashing (at least 32 characters).
+PEPPER=local-dev-pepper-000000000000000000000000
+
+# Used only to store IP addresses as HMACs (at least 32 characters).
+IP_HASH_KEY=local-dev-ip-hash-00000000000000000000000
+
+# Login throttling: per-IP limit, and the club-wide alarm's limits, hold time and extra
+# delay. Made-up local values; the live ones are private.
+THROTTLE_SETTINGS='{"ip_failures_per_hour":40,"alarm_short_minutes":10,"alarm_short_failures":25,"alarm_long_failures":100,"alarm_hold_minutes":30,"alarm_delay_ms":1000}'
+
+# Cloudflare's public Turnstile TEST keys, which always pass
+# (developers.cloudflare.com/turnstile/troubleshooting/testing/).
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+
+# Lets you try /admin/setup locally (the seed admin already exists, so one more is allowed).
+ADMIN_SETUP_TOKEN=local-dev-setup-token-000000000000000

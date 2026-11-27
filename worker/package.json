@@ -8,7 +8,9 @@
     "typecheck": "npm run types && tsc -p tsconfig.json && tsc -p test/tsconfig.json",
     "test": "vitest run",
     "build": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev",
+    "dev": "node scripts/dev.mjs",
+    "seed": "node scripts/seed.mjs",
+    "totp": "node scripts/dev-totp.mjs",
     "rules": "bash scripts/check-code-rules.sh"
   },
   "engines": {
