@@ -3,6 +3,13 @@
 // nightly clean-up. Every request comes here first (run_worker_first), so
 // every response gets the security headers.
 
+import { adminAuditRoutes } from "./api/admin-audit.js";
+import { adminAuthRoutes } from "./api/admin-auth.js";
+import { adminEventRoutes } from "./api/admin-events.js";
+import { adminLeagueRoutes } from "./api/admin-leagues.js";
+import { adminMemberRoutes } from "./api/admin-members.js";
+import { adminResourceRoutes } from "./api/admin-resources.js";
+import { adminScheduleRoutes } from "./api/admin-schedule.js";
 import { availabilityRoutes } from "./api/availability.js";
 import { bookingRoutes } from "./api/bookings.js";
 import { eventRoutes } from "./api/events.js";
@@ -18,7 +25,19 @@ import { alarmUntil } from "./throttle.js";
 const READ_METHODS = new Set(["GET", "HEAD"]);
 
 /** Every /api route. Each module lists its own. */
-export const ROUTES = [...memberAuthRoutes, ...availabilityRoutes, ...bookingRoutes, ...eventRoutes];
+export const ROUTES = [
+  ...memberAuthRoutes,
+  ...availabilityRoutes,
+  ...bookingRoutes,
+  ...eventRoutes,
+  ...adminAuthRoutes,
+  ...adminMemberRoutes,
+  ...adminResourceRoutes,
+  ...adminEventRoutes,
+  ...adminScheduleRoutes,
+  ...adminLeagueRoutes,
+  ...adminAuditRoutes,
+];
 
 const api = createRouter(ROUTES);
 
