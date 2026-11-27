@@ -1,0 +1,87 @@
+/* Mobile-first, large text and buttons, works in light and dark mode. */
+
+:root {
+  color-scheme: light dark;
+  --text: #1a1a1a;
+  --muted: #555;
+  --bg: #ffffff;
+  --accent: #0b5cad;
+  --accent-text: #ffffff;
+  --border: #d0d0d0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #f0f0f0;
+    --muted: #b8b8b8;
+    --bg: #121212;
+    --accent: #5aa9ff;
+    --accent-text: #0a0a0a;
+    --border: #3a3a3a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+}
+
+main,
+footer {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+h1 {
+  font-size: 1.9rem;
+  line-height: 1.2;
+}
+
+.lead {
+  font-size: 1.25rem;
+  color: var(--muted);
+}
+
+a {
+  color: var(--accent);
+}
+
+.button {
+  display: inline-block;
+  min-height: 3rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.button-disabled {
+  background: var(--border);
+  color: var(--muted);
+}
+
+.rules li {
+  margin-bottom: 0.75rem;
+}
+
+footer {
+  border-top: 1px solid var(--border);
+  margin-top: 2rem;
+}

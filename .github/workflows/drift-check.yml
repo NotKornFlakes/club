@@ -1,0 +1,70 @@
+name: Weekly drift check
+
+# Catches changes made outside Terraform between deploys: an edit in the
+# Cloudflare dashboard, or the state bucket's public r2.dev address being
+# switched on. A failed run sends the repo owner a GitHub notification.
+# Run it by hand from the Actions tab.
+on:
+  schedule:
+    - cron: "23 13 * * 1" # Mondays 13:23 UTC (8:23 or 9:23 a.m. New York)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Same group as deploy.yml, so a check never overlaps an apply
+concurrency:
+  group: terraform
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Read-only credentials, same as the PR plan
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.PLAN_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.PLAN_R2_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_api_token: ${{ secrets.PLAN_CLOUDFLARE_API_TOKEN }}
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Bundle the Worker
+        working-directory: worker
+        run: |
+          npm ci --no-fund
+          npm run build
+
+      # The wrapper is off so terraform's own exit code reaches the script
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Init
+        working-directory: infra
+        run: terraform init
+
+      # main is always applied, so any planned change means the live config no
+      # longer matches the code. -detailed-exitcode: 0 = none, 2 = changes.
+      - name: Plan
+        working-directory: infra
+        run: |
+          set +e
+          terraform plan -lock=false -detailed-exitcode
+          status=$?
+          if [ "$status" -eq 2 ]; then
+            echo "::error title=Drift detected::The live Cloudflare config differs from main. Read the plan above, then put the change in code or re-run the deploy to undo it."
+          fi
+          exit "$status"
