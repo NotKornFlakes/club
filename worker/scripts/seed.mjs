@@ -12,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ensureDevVars } from "./dev-vars.mjs";
-import { SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
+import { SEED_ADMIN, SEED_ALLEY_LEAGUE, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
 
 const workerDir = new URL("..", import.meta.url);
 const wrangler = new URL("../node_modules/.bin/wrangler", import.meta.url).pathname;
@@ -49,5 +49,5 @@ console.log("\nLocal test data is ready. Start the site with: npm run dev\n");
 console.log("Members (member number / PIN):");
 for (const m of SEED_MEMBERS) console.log(`  ${m.number} / ${m.pin}`);
 console.log(`\nAdmin: username "${SEED_ADMIN.username}", password "${SEED_ADMIN.password}".`);
-console.log(`Programs: ${SEED_PROGRAMS.map((p) => p.name).join(", ")}. Leagues: ${SEED_LEAGUES.map((l) => l.name).join(", ")}.`);
+console.log(`Programs: ${SEED_PROGRAMS.map((p) => p.name).join(", ")}. Leagues: ${SEED_LEAGUES.map((l) => l.name).join(", ")}; ${SEED_ALLEY_LEAGUE.name} on all lanes.`);
 console.log("For the 6-digit code, run: npm run totp");

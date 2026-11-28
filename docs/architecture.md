@@ -141,6 +141,17 @@ worker/
     every server and database check.
   - **Migration `0002`:** `resources.area` (the area id from the club's settings) and
     `leagues.public` (a program, shown by name). Both are additive, with defaults.
+  - **Lanes (migration `0004`):**
+    - A booking on several lanes is one row per lane. The first row leads (`group_id`
+      NULL), and the others point at it. All the rows go in one D1 batch (one
+      transaction), so it's all or nothing, and the slot table still stops double
+      bookings.
+    - Members see, cancel and export a group as one booking, and the booking limit counts
+      only the lead row.
+    - Admins can book a whole area at once (the same grouping), and `leagues.whole_area`
+      books every lane each week.
+    - The week view counts free lanes per hour in the browser (`public/js/lanes.js`) from
+      the same public per-lane data.
 - **Bundling.** Terraform's `content_file` takes one file, so CI runs
   `wrangler deploy --dry-run --outdir dist` to bundle `src/` into one file. Terraform
   uploads that file. Terraform owns the Worker; `wrangler deploy` is never run for real.

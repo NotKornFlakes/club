@@ -2,12 +2,14 @@
 // Admin: a day's schedule for one court or room, with who booked each slot; one-off admin
 // bookings; cancelling any booking (even within 24 hours).
 import { api, byId, el, formatClubDate, formatRange, formatTime } from "../common.js";
-import { clubToday, showError, showOk, start } from "./admin.js";
+import { clubToday, showError, showOk, start, wholeAreaChoice } from "./admin.js";
 
 const resourceSelect = /** @type {HTMLSelectElement} */ (byId("resource"));
 const dateInput = /** @type {HTMLInputElement} */ (byId("date"));
 /** @param {string} id */
 const value = (id) => /** @type {HTMLInputElement} */ (byId(id)).value.trim();
+/** @type {Map<number, string>} */
+const areaOf = new Map();
 
 async function load() {
   try {
@@ -57,6 +59,7 @@ byId("booking-form").addEventListener("submit", async (event) => {
         start_time: value("start-time"),
         end_date: value("end-date"),
         end_time: value("end-time"),
+        whole_area: /** @type {HTMLInputElement} */ (byId("whole-area")).checked,
       },
     });
     showOk("Booking added.");
@@ -71,6 +74,10 @@ try {
   await start();
   const { resources } = await api("/api/admin/resources");
   resourceSelect.replaceChildren(...resources.map((/** @type {{ id: number, name: string, active: boolean }} */ r) => el("option", { value: r.id, text: r.active ? r.name : `${r.name} (retired)` })));
+  for (const r of resources) areaOf.set(Number(r.id), String(r.area));
+  const wording = "Book all {area} at once (one booking)";
+  wholeAreaChoice(resourceSelect, areaOf, wording);
+  resourceSelect.addEventListener("change", () => wholeAreaChoice(resourceSelect, areaOf, wording));
   dateInput.value = clubToday();
   for (const id of ["start-date", "end-date"]) /** @type {HTMLInputElement} */ (byId(id)).value = clubToday();
   resourceSelect.addEventListener("change", load);

@@ -29,7 +29,7 @@
   },
   "areas": [
     { "id": "gym", "name": "Gym" },
-    { "id": "bowling", "name": "Bowling lanes", "any_label": "Any lane" },
+    { "id": "bowling", "name": "Bowling lanes", "lanes": { "max_per_booking": 2 } },
     { "id": "rooms", "name": "Rooms" }
   ],
   "booking": {

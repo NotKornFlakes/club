@@ -21,7 +21,8 @@ const WEEK = 7 * 86_400;
 
 // One statement per kind of limit, so two quick requests can't both get past it: SQLite
 // runs each statement as a whole, and D1 runs one write at a time. Only the member's own
-// active bookings count; admin bookings and leagues have no member and never do.
+// active bookings count; admin bookings and leagues have no member and never do. Lanes
+// booked together count once: only each booking's first row (group_id NULL) is counted.
 // Parameters: ?1 resource, ?2 member, ?3 start, ?4 end, ?5 now, ?6 the limit, ?7 seven days
 // in seconds. Values are always bound, never written into the SQL text.
 
@@ -31,7 +32,7 @@ const INSERT_NO_LIMIT = `INSERT INTO bookings (resource_id, kind, member_id, sta
 // At most ?6 bookings that haven't ended yet (each counts until it ends).
 const INSERT_UPCOMING = `INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at)
   SELECT ?1, 'member', ?2, ?3, ?4, ?5
-  WHERE (SELECT COUNT(*) FROM bookings WHERE member_id = ?2 AND status = 'active' AND ends_at > ?5) < ?6
+  WHERE (SELECT COUNT(*) FROM bookings WHERE member_id = ?2 AND status = 'active' AND group_id IS NULL AND ends_at > ?5) < ?6
   RETURNING id`;
 
 // At most ?6 seconds booked in any 7 days in a row ([w, w + 7 days)). Only 7-day stretches
@@ -45,39 +46,53 @@ const INSERT_HOURS_PER_WEEK = `INSERT INTO bookings (resource_id, kind, member_i
       SELECT ?3 AS w
       UNION SELECT ?4 - ?7
       UNION SELECT starts_at FROM bookings
-        WHERE member_id = ?2 AND status = 'active' AND starts_at > ?3 - ?7 AND starts_at < ?4
+        WHERE member_id = ?2 AND status = 'active' AND group_id IS NULL AND starts_at > ?3 - ?7 AND starts_at < ?4
       UNION SELECT ends_at - ?7 FROM bookings
-        WHERE member_id = ?2 AND status = 'active' AND ends_at > ?3 AND ends_at < ?4 + ?7
+        WHERE member_id = ?2 AND status = 'active' AND group_id IS NULL AND ends_at > ?3 AND ends_at < ?4 + ?7
     ) AS stretch
     WHERE min(?4, stretch.w + ?7) - max(?3, stretch.w)
       + (SELECT COALESCE(SUM(min(b.ends_at, stretch.w + ?7) - max(b.starts_at, stretch.w)), 0)
          FROM bookings b
-         WHERE b.member_id = ?2 AND b.status = 'active' AND b.starts_at < stretch.w + ?7 AND b.ends_at > stretch.w)
+         WHERE b.member_id = ?2 AND b.status = 'active' AND b.group_id IS NULL
+           AND b.starts_at < stretch.w + ?7 AND b.ends_at > stretch.w)
       > ?6
   )
   RETURNING id`;
 
+// Every other lane of the same booking: inserted only if the first lane's row (?6, same
+// member, time and moment) went in, and pointing at it.
+const INSERT_MORE_LANES = `INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at, group_id)
+  SELECT ?1, 'member', ?2, ?3, ?4, ?5, lead.id FROM bookings lead
+  WHERE lead.resource_id = ?6 AND lead.member_id = ?2 AND lead.starts_at = ?3 AND lead.ends_at = ?4
+    AND lead.created_at = ?5 AND lead.status = 'active' AND lead.group_id IS NULL`;
+
 /**
- * Saves a member's booking if it stays within the club's limit. Returns the new booking's
- * id, or throws the plain-words refusal (limit reached, slot taken, suspended...).
+ * Saves a member's booking (one resource, or several lanes together) if it stays within
+ * the club's limit. All lanes go in one transaction: all of them are booked, or none.
+ * Returns the booking's id (its first lane's row), or throws the plain-words refusal
+ * (limit reached, slot taken, suspended...).
  * @param {D1Database} db
  * @param {Limit} limit
- * @param {{ resourceId: number, memberId: number, start: number, end: number, now: number }} booking
+ * @param {{ resourceIds: number[], memberId: number, start: number, end: number, now: number }} booking
  * @returns {Promise<number>}
  */
-export async function insertMemberBooking(db, limit, { resourceId, memberId, start, end, now }) {
-  const statement =
+export async function insertMemberBooking(db, limit, { resourceIds, memberId, start, end, now }) {
+  const [lead, ...more] = resourceIds;
+  if (lead === undefined) throw new RangeError("no resource");
+  const first =
     limit.kind === "upcoming"
-      ? db.prepare(INSERT_UPCOMING).bind(resourceId, memberId, start, end, now, limit.max)
+      ? db.prepare(INSERT_UPCOMING).bind(lead, memberId, start, end, now, limit.max)
       : limit.kind === "hours_per_week"
-        ? db.prepare(INSERT_HOURS_PER_WEEK).bind(resourceId, memberId, start, end, now, limit.hours * 3600, WEEK)
-        : db.prepare(INSERT_NO_LIMIT).bind(resourceId, memberId, start, end, now);
-  let row;
+        ? db.prepare(INSERT_HOURS_PER_WEEK).bind(lead, memberId, start, end, now, limit.hours * 3600, WEEK)
+        : db.prepare(INSERT_NO_LIMIT).bind(lead, memberId, start, end, now);
+  /** @type {D1Result<Record<string, unknown>>[]} */
+  let results = [];
   try {
-    row = await statement.first();
+    results = await db.batch([first, ...more.map((id) => db.prepare(INSERT_MORE_LANES).bind(id, memberId, start, end, now, lead))]);
   } catch (error) {
     bookingRefusal(error);
   }
+  const row = results[0]?.results[0];
   if (!row) throw limitRefusal(limit);
   return Number(row.id);
 }

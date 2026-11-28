@@ -181,7 +181,9 @@ message and script gets its values from there.
 - **Name, motto, year, contact** (`name`, `motto`, `founded`, `contact`): the header, the
   footer on every page, and the Contact page (address, OpenStreetMap link, phone, email,
   Facebook and X).
-- **Areas** (`areas`): the week view's switcher (Gym, Bowling lanes, Rooms).
+- **Areas** (`areas`): the week view's switcher (Gym, Bowling lanes, Rooms). An area with
+  `"lanes": { "max_per_booking": 2 }` works like the bowling alley: counts per hour, a
+  lane-by-lane day view, and up to that many lanes in one member booking.
 - **Redirects** (`redirects`): the old site's page addresses → the new pages, so old links
   keep working.
 - **Booking limits** (`booking`): the longest booking, how much a member may book
@@ -244,21 +246,35 @@ a time: swipe, or tap the day tabs. Logged out, it's view only, with **Log in to
   book over it. A league without the tick shows only as "Taken".
 - For a program on several days (Monday to Friday), add one season per day.
 - Every court, room and lane has an **area** (Admin → Courts & rooms), which decides where
-  it shows. Bowling lanes have **Any lane**: a time is free if any lane is free, and the
-  booking gets the first lane that's free for the whole time.
+  it shows.
+- **Bowling lanes** (an area with `lanes` in the club's settings):
+  - The week shows each hour as a count, such as "5 of 8 lanes free", shaded darker as it
+    fills up.
+  - Tapping an hour opens that day's lanes, Lane 1 to Lane 8 side by side. On a phone,
+    the lanes scroll sideways with the lane names and times pinned.
+  - Members tap free times on 1 or 2 lanes (the same start time), choose how long, and book
+    them as one booking. They see it, cancel it and get its calendar entry as one, and the
+    club's booking limit counts it once.
+  - 3 or more lanes, or the whole alley, is a party: members ask the club (Bar & Banquets).
+  - A league on all lanes shows as one block, such as "Friday League — all lanes".
 - This Week never shows who booked, admin notes or private league names.
 
 ### Admin bookings, leagues and events
 
 - **Schedule**: pick a court or room and a date to see who booked each slot. **Add an admin
   booking** for closures or one-off events: no date limit, member rules don't apply, up to
-  30 days per booking. **Cancel this booking** works on any booking, even within 24 hours.
-  The member isn't told automatically, so let them know.
+  30 days per booking. For a lane, tick **Book all Bowling lanes at once** to book every
+  lane in one action, for a party or a tournament. It's refused as a whole if any lane is
+  already booked then. **Cancel this booking** works on any booking, even within 24 hours,
+  and cancels every lane booked with it. The member isn't told automatically, so let them
+  know.
 - **Leagues**: one season = one court or room, one weekday, a start and end time, and a
   first and last date (at most 12 months from today). Every free date is booked; dates that
   clash with an existing booking are skipped and listed with who has them. When a season
   ends, use **Renew season** to create the next one. **Cancel league** frees its future
-  dates. For two weekdays, create two leagues.
+  dates. For two weekdays, create two leagues. For a lane, tick **Every one of the Bowling
+  lanes** for a whole-alley league; a date is skipped if any lane is booked then. Tick
+  **Show on This Week** to show it by name ("Friday League — all lanes").
 - **Club events**: events at other places, shown to members on their Club events page.
 
 ### The login alarm
@@ -420,8 +436,11 @@ Turnstile while the alarm is on.
 > **2. Book.** Tap **Book**. Choose **Gym**, **Bowling lanes** or **Rooms**. You see the
 > week (on a phone, one day at a time: swipe or tap a day). Programs like Pickleball show
 > by name; times someone else has booked show **Taken**. Tap a **Free** time, then choose
-> the start time and how long (15 minutes up to 2 hours). For bowling, choose a lane or
-> **Any lane**.
+> the start time and how long (15 minutes up to 2 hours).
+>
+> **Bowling:** choose **Bowling lanes**. Each hour shows how many lanes are free. Tap an
+> hour to see every lane, tap a free time on 1 or 2 lanes, choose how long, and book. For
+> more lanes or the whole alley, ask the club about a party.
 >
 > **3. Agree to the rules.** Read the booking rules, tick **I agree**, and tap **Book**.
 >

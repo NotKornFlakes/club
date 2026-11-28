@@ -6,6 +6,7 @@
 // See docs/architecture.md, section 6 "Leagues".
 
 import { auditEntry } from "../audit.js";
+import { CLUB } from "../club.js";
 import { HttpError, json } from "../http.js";
 import { addDays, addMonths, clubTimeToUtc, clubToday, weekdayOf } from "../time.js";
 import { bool, date, idParam, int, onlyFields, quarterTime, str } from "../validate.js";
@@ -13,7 +14,7 @@ import { bookedBy } from "./admin-schedule.js";
 
 /** @typedef {import("../router.js").Ctx} Ctx */
 /** @typedef {import("../router.js").Route} Route */
-/** @typedef {{ name: string, resourceId: number, weekday: number, starts: string, ends: string, first: string, last: string, renewedFrom: number | null, isPublic: boolean }} Season */
+/** @typedef {{ name: string, resourceId: number, weekday: number, starts: string, ends: string, first: string, last: string, renewedFrom: number | null, isPublic: boolean, wholeArea?: boolean }} Season */
 
 /** @param {Ctx} ctx */
 const adminId = (ctx) => /** @type {import("../sessions.js").AdminSession} */ (ctx.admin).adminId;
@@ -50,29 +51,53 @@ function checkSeason(ctx, season) {
 async function createSeason(ctx, season) {
   const { env, now } = ctx;
   checkSeason(ctx, season);
-  const resource = await env.DB.prepare("SELECT name FROM resources WHERE id = ?").bind(season.resourceId).first();
+  const resource = await env.DB.prepare("SELECT name, area FROM resources WHERE id = ?").bind(season.resourceId).first();
   if (!resource) throw new HttpError(404, "not_found", "We couldn't find that court or room.");
+  // A whole-area season (all lanes) books every active resource in this one's area.
+  /** @type {number[]} */
+  let ids = [season.resourceId];
+  if (season.wholeArea) {
+    if (String(resource.area) === "") throw new HttpError(400, "bad_input", "That court or room isn't in an area yet.");
+    const { results: all } = await env.DB.prepare("SELECT id FROM resources WHERE area = ? AND active = 1 ORDER BY sort_order, name, id")
+      .bind(String(resource.area))
+      .all();
+    ids = all.map((r) => Number(r.id));
+  }
   const dates = seasonDates(season).filter((d) => d.start > now);
   if (dates.length === 0) throw new HttpError(400, "bad_input", `There's no ${WEEKDAYS[season.weekday]} in those dates.`);
 
   const league = await env.DB.prepare(
-    `INSERT INTO leagues (name, resource_id, weekday, starts_local, ends_local, first_date, last_date, renewed_from, public, created_by_admin_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO leagues (name, resource_id, weekday, starts_local, ends_local, first_date, last_date, renewed_from, public, whole_area, created_by_admin_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(season.name, season.resourceId, season.weekday, season.starts, season.ends, season.first, season.last, season.renewedFrom, season.isPublic ? 1 : 0, adminId(ctx), now)
+    .bind(
+      season.name,
+      season.resourceId,
+      season.weekday,
+      season.starts,
+      season.ends,
+      season.first,
+      season.last,
+      season.renewedFrom,
+      season.isPublic ? 1 : 0,
+      season.wholeArea ? 1 : 0,
+      adminId(ctx),
+      now,
+    )
     .first();
   const leagueId = Number(league?.id);
 
   for (let attempt = 1; attempt <= MAX_TRIES; attempt += 1) {
-    // Which dates already have a booking in that time?
+    // Which dates already have a booking in that time, on any of the lanes/resources?
     const found = await env.DB.batch(
       dates.map((d) =>
         env.DB.prepare(
           `SELECT b.id, b.kind, b.label, m.member_number, m.display_name, l.name AS league_name
            FROM booking_slots s JOIN bookings b ON b.id = s.booking_id
            LEFT JOIN members m ON m.id = b.member_id LEFT JOIN leagues l ON l.id = b.league_id
-           WHERE s.resource_id = ? AND s.slot_start >= ? AND s.slot_start < ? ORDER BY s.slot_start LIMIT 1`,
-        ).bind(season.resourceId, d.start, d.end),
+           WHERE s.resource_id IN (SELECT value FROM json_each(?)) AND s.slot_start >= ? AND s.slot_start < ?
+           ORDER BY s.slot_start LIMIT 1`,
+        ).bind(JSON.stringify(ids), d.start, d.end),
       ),
     );
     const clashes = dates
@@ -82,11 +107,13 @@ async function createSeason(ctx, season) {
 
     try {
       await env.DB.batch([
-        ...free.map((d) =>
-          env.DB.prepare(
-            `INSERT INTO bookings (resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
-             VALUES (?, 'league', ?, ?, ?, ?, ?, ?)`,
-          ).bind(season.resourceId, leagueId, season.name, d.start, d.end, now, adminId(ctx)),
+        ...free.flatMap((d) =>
+          ids.map((id) =>
+            env.DB.prepare(
+              `INSERT INTO bookings (resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
+               VALUES (?, 'league', ?, ?, ?, ?, ?, ?)`,
+            ).bind(id, leagueId, season.name, d.start, d.end, now, adminId(ctx)),
+          ),
         ),
         ...clashes.map((c) =>
           env.DB.prepare("INSERT INTO league_skips (league_id, on_date, clashing_booking_id) VALUES (?, ?, ?)").bind(
@@ -102,7 +129,7 @@ async function createSeason(ctx, season) {
           target: `league:${leagueId}`,
           details: {
             name: season.name,
-            resource: String(resource.name),
+            resource: season.wholeArea ? `all of area ${String(resource.area)} (${ids.length})` : String(resource.name),
             first_date: season.first,
             last_date: season.last,
             public: season.isPublic,
@@ -134,7 +161,7 @@ async function createSeason(ctx, season) {
 
 /** @param {Record<string, unknown>} body */
 function readSeason(body) {
-  onlyFields(body, ["name", "resource_id", "weekday", "starts_local", "ends_local", "first_date", "last_date", "public"]);
+  onlyFields(body, ["name", "resource_id", "weekday", "starts_local", "ends_local", "first_date", "last_date", "public", "whole_area"]);
   return {
     name: str(body, "name", { max: 80, label: "the league name" }),
     resourceId: int(body, "resource_id", { min: 1, max: Number.MAX_SAFE_INTEGER, label: "the place" }),
@@ -146,6 +173,8 @@ function readSeason(body) {
     renewedFrom: null,
     // Public = a program: shown with its name on This Week and Book.
     isPublic: body.public === undefined ? false : bool(body, "public"),
+    // Every lane in the resource's area (for example a league on all 8 lanes).
+    wholeArea: body.whole_area === undefined ? false : bool(body, "whole_area"),
   };
 }
 
@@ -180,6 +209,7 @@ async function renewLeague(ctx) {
     last: date(ctx.body, "last_date", "the new last date"),
     renewedFrom: Number(old.id),
     isPublic: Number(old.public) === 1,
+    wholeArea: Number(old.whole_area) === 1,
   });
 }
 
@@ -204,7 +234,7 @@ async function cancelLeague(ctx) {
 async function listLeagues(ctx) {
   const { results } = await ctx.env.DB.prepare(
     `SELECT l.id, l.name, l.weekday, l.starts_local, l.ends_local, l.first_date, l.last_date, l.cancelled_at, l.renewed_from, l.public,
-            r.name AS resource,
+            l.whole_area, r.name AS resource, r.area,
             (SELECT COUNT(*) FROM bookings b WHERE b.league_id = l.id AND b.status = 'active') AS booked,
             (SELECT COUNT(*) FROM league_skips k WHERE k.league_id = l.id) AS skipped,
             (SELECT COUNT(*) FROM leagues n WHERE n.renewed_from = l.id AND n.cancelled_at IS NULL) AS renewed
@@ -217,7 +247,8 @@ async function listLeagues(ctx) {
     leagues: results.map((l) => ({
       id: Number(l.id),
       name: String(l.name),
-      resource: String(l.resource),
+      resource: Number(l.whole_area) === 1 ? `All ${CLUB.areas.find((a) => a.id === l.area)?.name ?? "lanes"}` : String(l.resource),
+      whole_area: Number(l.whole_area) === 1,
       weekday: WEEKDAYS[Number(l.weekday)],
       starts_local: String(l.starts_local),
       ends_local: String(l.ends_local),

@@ -64,7 +64,7 @@ const BOOKING_KEYS = [
  * @typedef {{ background: string, text: string, highlight: string }} Brand
  * @typedef {{ label: string, url: string }} Link
  * @typedef {{ address: string, phone: string, email: string, map: string, links: ReadonlyArray<Link> }} Contact
- * @typedef {{ id: string, name: string, any_label: string | null }} Area
+ * @typedef {{ id: string, name: string, any_label: string | null, lanes: { max_per_booking: number } | null }} Area
  * @typedef {{ name: string, area: string }} StartingResource
  * @typedef {{
  *   max_length_minutes: number, limit: Limit, days_ahead: number,
@@ -235,12 +235,19 @@ function redirectList(raw) {
 /** @param {unknown} raw @returns {ReadonlyArray<Area>} */
 function areaList(raw) {
   const areas = list(raw, "areas", 6).map((item, i) => {
-    const a = exactKeys(item, `areas[${i}]`, ["id", "name", "any_label"], ["any_label"]);
+    const a = exactKeys(item, `areas[${i}]`, ["id", "name", "any_label", "lanes"], ["any_label", "lanes"]);
     if (typeof a.id !== "string" || !/^[a-z][a-z0-9-]{0,19}$/.test(a.id)) {
       throw problem(`areas[${i}].id`, 'must be a short lowercase id like "gym"');
     }
     const anyLabel = a.any_label === undefined ? null : text(a.any_label, `areas[${i}].any_label`, 30);
-    return Object.freeze({ id: a.id, name: text(a.name, `areas[${i}].name`, 30), any_label: anyLabel });
+    // "lanes": many alike resources (bowling lanes). The week view counts free lanes, a day
+    // view shows each lane, and a member can book up to max_per_booking lanes at once.
+    let lanes = null;
+    if (a.lanes !== undefined) {
+      const l = exactKeys(a.lanes, `areas[${i}].lanes`, ["max_per_booking"]);
+      lanes = Object.freeze({ max_per_booking: whole(l.max_per_booking, `areas[${i}].lanes.max_per_booking`, 1, 8) });
+    }
+    return Object.freeze({ id: a.id, name: text(a.name, `areas[${i}].name`, 30), any_label: anyLabel, lanes });
   });
   if (new Set(areas.map((a) => a.id)).size !== areas.length) throw problem("areas", "has the same id twice");
   return Object.freeze(areas);
