@@ -1,8 +1,12 @@
 // @ts-check
 // Shared browser code: API calls (with the CSRF token), building page elements safely
-// (textContent only, never HTML), and club-time formatting (America/New_York).
+// (textContent only, never HTML), and club-time formatting (the club's time zone).
+// /js/club.js is made by the Worker from the club's settings file.
 
-export const CLUB_TIME_ZONE = "America/New_York";
+import { CLUB } from "./club.js";
+
+export { CLUB };
+export const CLUB_TIME_ZONE = CLUB.time_zone;
 
 /** An API error with the server's plain-words message. */
 export class ApiError extends Error {
@@ -143,11 +147,13 @@ export function formatRange(start, end) {
   return `${formatDate(start)}, ${formatTime(start)} to ${formatTime(end)}`;
 }
 
+// A club date has no time of day, so it's shown as that date in UTC: right in every time zone.
+const clubDateFormat = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
+
 /** A club date "2026-11-27" as "Friday, November 27". @param {string} date */
 export function formatClubDate(date) {
   const [y, m, d] = date.split("-").map(Number);
-  // Noon UTC is the same calendar date in New York.
-  return formatDate(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1, 17) / 1000);
+  return clubDateFormat.format(new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1, 12)));
 }
 
 /** Wires every "Log out" button on the page. */

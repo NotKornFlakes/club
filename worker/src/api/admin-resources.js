@@ -1,7 +1,9 @@
 // @ts-check
-// Admin: courts and rooms (create, rename, order, retire) and their weekly opening hours.
+// Admin: courts and rooms (create, rename, order, retire) and their weekly opening hours,
+// and loading the club's starting list (from its settings file) into an empty list.
 
 import { auditEntry } from "../audit.js";
+import { CLUB } from "../club.js";
 import { HttpError, json } from "../http.js";
 import { isQuarterHour } from "../time.js";
 import { bool, idParam, int, onlyFields, str } from "../validate.js";
@@ -136,10 +138,49 @@ async function setHours(ctx) {
   return json({ ok: true });
 }
 
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
+
+/**
+ * Adds the club's starting courts and rooms from its settings file, each open the same hours
+ * every day. Only while there are none: after that, the admin pages own them.
+ * @param {Ctx} ctx
+ */
+async function loadStartingList(ctx) {
+  onlyFields(ctx.body, []);
+  const db = ctx.env.DB;
+  const notEmpty = () => new HttpError(409, "not_empty", "The club's starting list can only be added while there are no courts or rooms.");
+  if (await db.prepare("SELECT id FROM resources LIMIT 1").first()) throw notEmpty();
+  const { opens, closes } = CLUB.starting_hours;
+  try {
+    await db.batch([
+      ...CLUB.starting_resources.flatMap((name, i) => [
+        db.prepare("INSERT INTO resources (name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?)").bind(name, i + 1, ctx.now, ctx.now),
+        ...WEEKDAYS.map((weekday) =>
+          db
+            .prepare("INSERT INTO opening_hours (resource_id, weekday, opens_local, closes_local) SELECT id, ?, ?, ? FROM resources WHERE name = ?")
+            .bind(weekday, opens, closes, name),
+        ),
+      ]),
+      auditEntry(db, {
+        at: ctx.now,
+        adminId: adminId(ctx),
+        action: "resource.starting_list",
+        details: { resources: CLUB.starting_resources, opens, closes },
+      }),
+    ]);
+  } catch (error) {
+    // Another admin added a court or room at the same moment; the batch changed nothing.
+    if (String(error).includes("UNIQUE")) throw notEmpty();
+    throw error;
+  }
+  return json({ added: CLUB.starting_resources.length }, 201);
+}
+
 /** @type {Route[]} */
 export const adminResourceRoutes = [
   { method: "GET", path: "/api/admin/resources", access: "admin", handler: listResources },
   { method: "POST", path: "/api/admin/resources", access: "admin", handler: createResource },
+  { method: "POST", path: "/api/admin/resources/starting-list", access: "admin", handler: loadStartingList },
   { method: "POST", path: "/api/admin/resources/:id/update", access: "admin", handler: updateResource },
   { method: "POST", path: "/api/admin/resources/:id/hours", access: "admin", handler: setHours },
 ];

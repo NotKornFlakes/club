@@ -91,6 +91,7 @@ What happens on every request:
 CLAUDE.md                 brief (source of truth)
 README.md                 setup, admin how-tos, threat model, "How to book" guide
 docs/architecture.md      this document
+clubs/pastime/club.json   the club's settings: name, rooms, hours, limits, rules, colors
 infra/                    Terraform: Worker, D1, cron, Turnstile, workers.dev route
 worker/
   src/                    Worker code (plain JavaScript modules)
@@ -113,6 +114,16 @@ worker/
   bundling, migrations, types), `typescript` (type checking only), and `vitest` with
   `@cloudflare/vitest-plugin` (tests; formerly `vitest-pool-workers`). This keeps supply-chain risk close to zero for
   the code that runs live.
+- **One settings file per club (decided 2026-11-28).** Everything club-specific lives in
+  `clubs/<club>/club.json`, which `worker/src/club.js` imports (Pastime is the first and
+  only club). `worker/src/club-config.js` checks it when the Worker starts: only known keys
+  (so no secret or throttle value can be added by mistake), booking limits within the
+  database's own ceilings (2 hours, 2 upcoming bookings), and rules whose placeholders are
+  filled from the limits. The Worker then fills pages as it serves them (HTMLRewriter, text
+  always escaped), and serves `/club.css` (accent colors) and `/js/club.js` (the public
+  settings for the page scripts). No inline scripts, so the CSP doesn't change. Resources
+  and hours in the file are a starting list, loaded once into an empty site from the admin
+  page; after that the admin pages own them. The README explains each setting.
 - **Bundling.** Terraform's `content_file` takes one file, so CI runs
   `wrangler deploy --dry-run --outdir dist` to bundle `src/` into one file. Terraform
   uploads that file. Terraform owns the Worker; `wrangler deploy` is never run for real.

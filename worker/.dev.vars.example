@@ -20,5 +20,6 @@ THROTTLE_SETTINGS='{"ip_failures_per_hour":40,"alarm_short_minutes":10,"alarm_sh
 TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 
-# Lets you try /admin/setup locally (the seed admin already exists, so one more is allowed).
+# Lets you try /admin/setup locally. Setup allows up to the club's admin limit (Pastime: 1),
+# and the seed admin already fills it, so to try setup, delete the admin locally first.
 ADMIN_SETUP_TOKEN=local-dev-setup-token-000000000000000

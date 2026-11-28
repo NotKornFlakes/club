@@ -3,20 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>[Club name] – Bookings</title>
+  <title data-club-title>Bookings</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
   <main id="main">
-    <h1>[Club name]</h1>
-    <p class="lead">Book the basketball court and club rooms.</p>
+    <h1 data-club="name"></h1>
+    <p class="lead" data-club="intro"></p>
 
     <p><a class="button button-wide" href="/login">Member login</a></p>
 
     <h2>Contact</h2>
-    <p>[Contact details]</p>
+    <p data-club="address"></p>
+    <p data-club="contact"></p>
+    <p><a data-club-website href="/">The club's main website</a></p>
   </main>
   <footer>
     <a href="/rules">Booking rules</a>

@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My bookings – [Club name]</title>
+  <title data-club-title>My bookings</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
@@ -28,13 +29,15 @@
 
     <h2>Coming up</h2>
     <div id="bookings" aria-live="polite"><p class="help">Loading…</p></div>
-    <p class="help">You can have up to 2 upcoming bookings. Bookings can be cancelled up to
-      24 hours before they start.</p>
+    <p class="help">You can have up to <span data-club="max_upcoming"></span>. Bookings can be
+      cancelled up to <span data-club="cancel_cutoff"></span> before they start.</p>
 
     <h2>Missed bookings</h2>
     <div id="no-shows">…</div>
-    <p class="help">Management records missed bookings. Members who miss 3 bookings may lose
-      booking privileges for 6 months. If you think one is wrong, please contact management.</p>
+    <p class="help">Management records missed bookings. Members who miss
+      <span data-club="missed_bookings"></span> may lose booking privileges for
+      <span data-club="suspension_length"></span>. If you think one is wrong, please contact
+      management.</p>
   </main>
   <footer>
     <a href="/rules">Booking rules</a>

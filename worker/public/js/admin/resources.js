@@ -1,6 +1,7 @@
 // @ts-check
-// Admin: courts and rooms (name, order, retire) and weekly opening hours.
-import { ApiError, api, byId, el, say } from "../common.js";
+// Admin: courts and rooms (name, order, retire) and weekly opening hours, and, while there
+// are none, the club's starting list from its settings file.
+import { ApiError, CLUB, api, byId, el, say } from "../common.js";
 import { showError, showOk, start } from "./admin.js";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -60,8 +61,21 @@ function resourceCard(r) {
 
 async function load() {
   const { resources } = await api("/api/admin/resources");
+  byId("starting-list").hidden = resources.length > 0;
   byId("resources").replaceChildren(...resources.map(resourceCard));
 }
+
+byId("starting-names").textContent = CLUB.starting_resources.join(", ");
+byId("starting-hours").textContent = `${CLUB.starting_hours.opens} to ${CLUB.starting_hours.closes}`;
+byId("starting-button").addEventListener("click", async () => {
+  try {
+    const { added } = await api("/api/admin/resources/starting-list", { method: "POST" });
+    showOk(`${added} courts and rooms added. Check their opening hours below.`);
+    await load();
+  } catch (error) {
+    showError(error);
+  }
+});
 
 byId("new-form").addEventListener("submit", async (event) => {
   event.preventDefault();

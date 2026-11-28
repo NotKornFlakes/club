@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fails CI if code breaks the code rules in docs/architecture.md, section 5.
+# Fails CI if code breaks the code rules in docs/architecture.md, section 5 (and rule 6 below).
 # These are tripwires for the usual mistakes, not a full parser.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -49,6 +49,21 @@ fi
 #    (The SVG namespace address in favicon.svg is a name, never fetched.)
 if grep -rnoE 'https?://[a-z0-9./-]+' public | grep -vE 'https://challenges\.cloudflare\.com|http://www\.w3\.org/2000/svg'; then
   echo "::error::Third-party address in a page or script. Only Turnstile (challenges.cloudflare.com) is allowed."
+  status=1
+fi
+
+# 6. Club-specific values live only in the club's settings file (clubs/<club>/club.json):
+#    no club name placeholders left in pages, and no time zone written into the code.
+if grep -rnF '[Club name]' public; then
+  echo "::error::A page still says [Club name]. Use <title data-club-title> or data-club=\"name\"."
+  status=1
+fi
+if grep -rnE '"(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)/[A-Za-z_]+' src public scripts; then
+  echo "::error::A time zone is written into the code. It comes from the club's settings file."
+  status=1
+fi
+if grep -rniE 'pastime' src public scripts --include='*.js' --include='*.html' --include='*.css' | grep -v 'clubs/pastime/club.json'; then
+  echo "::error::The club's name is written into the code. It comes from the club's settings file."
   status=1
 fi
 

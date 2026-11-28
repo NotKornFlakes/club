@@ -1,7 +1,7 @@
 // @ts-check
 // "My bookings": the member's upcoming bookings, with cancel (24-hour rule) and
 // "Add to calendar".
-import { ApiError, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
+import { ApiError, CLUB, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
 
 wireLogout();
 const message = byId("message");
@@ -27,7 +27,7 @@ function bookingCard(booking) {
     el("p", { className: "summary", text: formatRange(booking.starts_at, booking.ends_at) }),
     booking.can_cancel
       ? el("p", { className: "help", text: `You can cancel until ${formatDate(booking.cancel_until)}, ${formatTime(booking.cancel_until)}.` })
-      : el("p", { className: "help", text: "It's less than 24 hours away, so it can't be cancelled. If you can't make it, please let management know." }),
+      : el("p", { className: "help", text: `It's less than ${CLUB.phrases.cancel_cutoff} away, so it can't be cancelled. If you can't make it, please let management know.` }),
     actions,
   ]);
 }

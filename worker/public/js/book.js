@@ -1,8 +1,10 @@
 // @ts-check
 // The Book page: pick a court or room, a day, a start time and a length, agree to the
 // rules, and book. Taken slots say only "Taken"; the server never sends who booked.
-import { ApiError, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
-import { RULES } from "./rules.js";
+import { ApiError, CLUB, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
+
+const MAX_SECONDS = CLUB.booking.max_length_minutes * 60;
+const CUTOFF_SECONDS = CLUB.booking.cancel_cutoff_hours * 3600;
 
 wireLogout();
 
@@ -68,11 +70,11 @@ async function loadDay() {
   }
 }
 
-/** The booking lengths possible from a start: free slots in a row, up to 2 hours. @param {number} start */
+/** The booking lengths possible from a start: free slots in a row, up to the club's maximum. @param {number} start */
 function lengthsFrom(start) {
   const free = new Set(state.slots.filter((s) => s.state === "free").map((s) => s.start));
   const ends = [];
-  for (let end = start + 900; end <= start + 7200 && free.has(end - 900); end += 900) ends.push(end);
+  for (let end = start + 900; end <= start + MAX_SECONDS && free.has(end - 900); end += 900) ends.push(end);
   return ends;
 }
 
@@ -106,11 +108,11 @@ function chooseStart(start) {
   const cancelNote = el("p", { className: "message message-info" });
   const refresh = () => {
     summary.textContent = `${resourceName}: ${formatRange(start, end)}`;
-    const deadline = start - 24 * 3600;
+    const deadline = start - CUTOFF_SECONDS;
     cancelNote.textContent =
       deadline > Date.now() / 1000
-        ? `You can cancel this booking until ${formatDate(deadline)}, ${formatTime(deadline)} (24 hours before it starts). After that, it can't be cancelled.`
-        : "This booking starts within 24 hours, so it can't be cancelled once you book it.";
+        ? `You can cancel this booking until ${formatDate(deadline)}, ${formatTime(deadline)} (${CLUB.phrases.cancel_cutoff} before it starts). After that, it can't be cancelled.`
+        : `This booking starts within ${CLUB.phrases.cancel_cutoff}, so it can't be cancelled once you book it.`;
   };
 
   const lengths = el("fieldset", { className: "choices" }, [el("legend", { text: "How long?" })]);
@@ -132,7 +134,7 @@ function chooseStart(start) {
   const form = el("form", { novalidate: true }, [
     lengths,
     el("h3", { text: "Booking Rules" }),
-    el("ul", { className: "rules" }, RULES.map((rule) => el("li", { text: rule }))),
+    el("ul", { className: "rules" }, CLUB.rules.map((rule) => el("li", { text: rule }))),
     el("div", { className: "agree" }, [agree, el("label", { for: "agree", text: "I agree to the booking rules" })]),
     error,
     bookButton,
@@ -237,7 +239,7 @@ async function start() {
         state.date = dateInput.value;
         loadDay();
       } else {
-        say(message, "You can book up to 30 days ahead.");
+        say(message, `You can book up to ${CLUB.phrases.days_ahead} ahead.`);
       }
     });
     byId("prev-day").addEventListener("click", () => moveDay(-1));

@@ -114,7 +114,7 @@ Admin pages are at `/admin/`. Admins log in with a username, a password of at le
 characters, and the 6-digit code from an authenticator app. Admin sessions last 12 hours.
 Every admin action goes in the **Audit log** (kept 24 months, can't be edited).
 
-### First-time admin setup (once per admin, at most two)
+### First-time admin setup (once per admin, up to the club's admin limit)
 
 1. Make a long random setup token and set it as a Worker secret:
    `openssl rand -base64 32`, then `cd worker && npx wrangler secret put ADMIN_SETUP_TOKEN`.
@@ -162,8 +162,40 @@ or 7 days without failures resets it. To unlock early: **Members → Open → Cl
 ### Courts, rooms and hours
 
 **Courts & rooms**: add, rename, set the order, or untick "Members can book it" to retire one
-(it's never deleted, because old bookings point at it). Hours are club time (New York), one box
-per day, like `09:00-12:00, 14:00-20:00`, on the quarter hour. An empty box means closed.
+(it's never deleted, because old bookings point at it). Hours are club time (the club's time
+zone), one box per day, like `09:00-12:00, 14:00-20:00`, on the quarter hour. An empty box means
+closed. On a brand-new site with no courts or rooms yet, **Add the starting list** adds the
+ones from the club's settings file, open its starting hours every day; change them from there.
+
+### The club's settings (`clubs/pastime/club.json`)
+
+Everything that differs from one club to the next is in one file: the club's name, intro
+and contact text, its main website, time zone, admin limit, accent colors, booking limits,
+the booking rules, and the starting list of courts and rooms with their starting hours.
+Change it in a PR like any other code. The Worker reads it when it starts, and every page,
+message and script gets its values from there.
+
+- **Booking limits** (`booking`): the longest booking, upcoming bookings per member, days
+  ahead, the cancel cutoff, the suggested suspension length, and the missed-bookings count
+  in the rules. The database also enforces 2 hours and 2 upcoming bookings for every club,
+  so a club can set those or less, never more.
+- **Rules**: written once, with placeholders such as `{cancel_cutoff}` filled in from the
+  limits, so the rules can never disagree with what the site enforces. They show on the
+  Rules page and before every booking.
+- **Admin limit** (`max_admins`): how many admins setup allows. Default 2; Pastime uses 1.
+- **Colors**: only the accent and its text color, light and dark. The tests check WCAG AA
+  contrast.
+- **Starting list**: loaded once into an empty site (above). After that, the admin pages own
+  courts, rooms and hours.
+
+**Never put secrets in this file**, and never the throttle or alarm settings: the repo is
+public. Only the settings listed above are allowed; anything else stops the Worker from
+starting, and the tests fail. Pastime's address and contact details are placeholders until
+the club confirms them, and there's no logo until the club gives permission.
+
+To set the site up for another club, give it its own `clubs/<club>/club.json` and point the
+one import in `worker/src/club.js` at it. Each club gets its own Cloudflare account,
+database and secrets.
 
 ### Admin bookings, leagues and events
 
@@ -240,15 +272,19 @@ npm run dev       # the site at http://localhost:8787 (Ctrl+C to stop)
 These accounts can't work on the live site, even by mistake. Their PINs and password are
 hashed with the fake pepper from `.dev.vars`, so they don't match under the real one.
 
-The seed data also has three resources (a court and two rooms) with opening hours, a few
-bookings, so you can see "Taken" slots, and two club events.
+The seed data also has the club's starting courts and rooms from its settings file (for
+Pastime: the Gymnasium, President's Room, Century Room and Lounge, open 9 a.m. to 10 p.m.
+every day), two league seasons in the gymnasium (Monday charity basketball, 6 to 8 p.m., and
+a Tuesday basketball league, 7 to 9 p.m., for the next 3 months), a few bookings, so you can
+see "Taken" slots, and two club events. Pastime's admin limit is 1 and the seed admin fills
+it, so `/admin/setup` shows "closed" locally.
 
 ### Checks
 
 ```bash
 npm test          # all tests, in the real Workers runtime against a local database
 npm run typecheck # type check (// @ts-check + JSDoc)
-npm run rules     # code rules: parameterized SQL, no innerHTML, no INSERT OR REPLACE
+npm run rules     # code rules: parameterized SQL, no innerHTML, no INSERT OR REPLACE, no club values in code
 ```
 
 ## Threat model

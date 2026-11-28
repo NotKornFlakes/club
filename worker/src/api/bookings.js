@@ -1,8 +1,9 @@
 // @ts-check
-// Members' own bookings: book, list, cancel (24-hour rule), and "Add to calendar".
+// Members' own bookings: book, list, cancel (the club's cancel cutoff), and "Add to calendar".
 
 import { bookingWindow, openRanges, withinOpenHours } from "../availability.js";
-import { CANCEL_CUTOFF_SECONDS, MAX_MEMBER_SECONDS, bookingRefusal } from "../bookings.js";
+import { CANCEL_CUTOFF_SECONDS, MAX_MEMBER_SECONDS, MAX_UPCOMING, bookingRefusal } from "../bookings.js";
+import { CLUB } from "../club.js";
 import { activeSuspension, suspendedMessage } from "../discipline.js";
 import { HttpError, json } from "../http.js";
 import { bookingIcs } from "../ics.js";
@@ -50,14 +51,14 @@ async function createBooking(ctx) {
     throw new HttpError(400, "bad_input", "Please pick a start time and length from the list.");
   }
   if (end - start > MAX_MEMBER_SECONDS) {
-    throw new HttpError(400, "too_long", "A booking can be at most 2 hours.");
+    throw new HttpError(400, "too_long", `A booking can be at most ${CLUB.phrases.max_length}.`);
   }
   if (start <= now) {
     throw new HttpError(400, "started", "That time has already started. Please pick a later one.");
   }
   const date = clubParts(start).date;
   const window = bookingWindow(now);
-  if (date > window.last) throw new HttpError(400, "outside_window", "You can book up to 30 days ahead.");
+  if (date > window.last) throw new HttpError(400, "outside_window", `You can book up to ${CLUB.phrases.days_ahead} ahead.`);
 
   // The database refuses this too; checking first gives the member the end date.
   const suspension = await activeSuspension(env.DB, member.memberId, now);
@@ -68,20 +69,23 @@ async function createBooking(ctx) {
     throw new HttpError(400, "closed", "That time is outside the opening hours. Please pick another.");
   }
 
-  let result;
+  // One statement, so two quick requests can't both get under the club's limit. The
+  // database's own trigger still refuses anything over its ceiling.
+  let row;
   try {
-    result = await env.DB.prepare(
-      "INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at) VALUES (?, 'member', ?, ?, ?, ?)",
+    row = await env.DB.prepare(
+      `INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at)
+       SELECT ?, 'member', ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM bookings WHERE member_id = ? AND status = 'active' AND ends_at > ?) < ?
+       RETURNING id`,
     )
-      .bind(resource.id, member.memberId, start, end, now)
-      .run();
+      .bind(resource.id, member.memberId, start, end, now, member.memberId, now, MAX_UPCOMING)
+      .first();
   } catch (error) {
     bookingRefusal(error);
   }
-  const booking = bookingView(
-    { id: result.meta.last_row_id, resource_name: resource.name, starts_at: start, ends_at: end },
-    now,
-  );
+  if (!row) bookingRefusal(new Error("too_many_upcoming"));
+  const booking = bookingView({ id: row.id, resource_name: resource.name, starts_at: start, ends_at: end }, now);
   return json({ booking }, 201);
 }
 
@@ -124,7 +128,7 @@ async function cancelBooking(ctx) {
     throw new HttpError(
       403,
       "too_late",
-      "Bookings can't be cancelled within 24 hours of the start. If you can't make it, please let management know.",
+      `Bookings can't be cancelled within ${CLUB.phrases.cancel_cutoff} of the start. If you can't make it, please let management know.`,
     );
   }
   // The status check makes a double cancel a no-op rather than an error from the trigger.

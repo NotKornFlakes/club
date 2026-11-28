@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Courts and rooms – Admin – [Club name]</title>
+  <title data-club-title>Courts and rooms – Admin</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
   <script type="module" src="/js/admin/resources.js"></script>
 </head>
 <body class="admin">
@@ -25,9 +26,16 @@
   <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
   <main id="main">
     <h1>Courts and rooms</h1>
-    <p class="lead">Opening hours are in club time (New York). Write each day's hours like
+    <p class="lead">Opening hours are in club time (<span data-club="time_zone_city"></span>). Write each day's hours like
       <code>09:00-12:00, 14:00-20:00</code>, on the quarter hour. Leave a day empty when it's closed.</p>
     <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
+    <section id="starting-list" aria-labelledby="starting-title" hidden>
+      <h2 id="starting-title">Start with the club's list</h2>
+      <p>There are no courts or rooms yet. Add the club's starting list from its settings file:
+        <span id="starting-names"></span>, each open <span id="starting-hours"></span> every day.
+        You can change any of it afterwards.</p>
+      <button type="button" class="button" id="starting-button">Add the starting list</button>
+    </section>
     <div id="resources"></div>
     <section aria-labelledby="new-title">
       <h2 id="new-title">Add a court or room</h2>
