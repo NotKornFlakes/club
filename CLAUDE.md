@@ -17,8 +17,8 @@ merged only via PR that I approve (MFA on), no secrets in the repo. No Microsoft
 other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs.
 
 ## Stack (decided)
-- Cloudflare only, in a NEW Cloudflare account owned by the club. I'm the only member with
-  account-wide access. Emergency access is the shared Proton Pass vault (see Admin).
+- Cloudflare only, in a NEW Cloudflare account owned by the club. I'm the only member.
+  Emergency access is the shared Proton Pass vault (see Admin).
 - ONE Worker serves both the static pages and `/api/*` from a single origin
   (not Pages + Worker: SameSite=Strict cookies break across pages.dev/workers.dev,
   and Terraform can't upload Pages assets).
@@ -167,9 +167,11 @@ Rules page linked in the footer:
   pastimeathleticclub.org's DNS moves to the club's Cloudflare account ("full setup").
 - The Weebly site and email must keep working: every existing DNS record is copied
   exactly, as "DNS only", before the nameservers change. The only new name is `book`.
-- After the move, the zone and all existing records belong to the club, which edits them in
-  the Cloudflare dashboard. Club DNS editors get the domain-scoped "Domain DNS" role on this
-  domain only, never an account-wide role.
+- After the move, the zone and all existing records belong to the club and are edited in the
+  Cloudflare dashboard. No club DNS accounts: the club's DNS rarely changes, and any
+  future change is a small task I do.
+- Optional after launch: SPF, DKIM and DMARC (`p=none` first) for the club's Google email
+  (`docs/launch-dns.md`, step 8).
 - Terraform manages ONLY what this project needs: the `book` custom domain, plus CAA
   records if ever needed. It never creates or imports the zone or the club's records, so
   the drift check never sees them. A CI check enforces this.

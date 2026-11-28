@@ -31,19 +31,15 @@ so the copies point to the same places they do now. The only new entry is `book`
 
 | Owner | What | Edited where |
 |---|---|---|
-| **The club** | The zone, and every record that exists today (website, email, any catch-all, anything else). Zone settings and DNSSEC. Any record added later. | Cloudflare dashboard |
+| **The club** | The zone, and every record that exists today (website, email, any catch-all, anything else). Zone settings and DNSSEC. Any record added later. | Cloudflare dashboard, by the owner |
 | **This project** | The `book` custom domain. CAA records too, but only if they're ever needed (step 6). | Terraform PRs in this repo |
 
 - Terraform never creates, imports or changes the zone or the club's records. It only
   refers to the zone (by its ID or name, which aren't secret).
-- **Who edits the club's DNS.** That's the owner, or a club member the owner invites with
-  the domain-scoped **Domain DNS** role ("edit DNS settings") on this one domain. Never give
-  them an account-wide role, because the same Cloudflare account holds the booking site
-  and its member data. Cloudflare's roles page doesn't say exactly what a domain-scoped
-  member can see of the account's Workers and databases. So before relying on it, check
-  what an invited member actually sees.
-- **The one rule for the club's DNS editors:** leave `book` alone. If the club ever adds CAA
-  records, tell the owner first (step 6 explains why).
+- **Who edits the club's DNS:** the owner, as a small task when one comes up. The club
+  doesn't get its own DNS accounts. Changes are rare.
+- **Two rules when editing the club's DNS:** leave `book` alone, and don't add CAA records
+  without checking step 6 first.
 
 ### How the drift check stays out of the club's records
 
@@ -64,15 +60,15 @@ Nobody runs `terraform import` on the club's records.
 What the drift check still watches: the `book` custom domain, any CAA records Terraform
 owns, and everything it watches today. One gap: the DNS record for `book` is made by
 Cloudflare, not by a Terraform resource, so the drift check may not notice if someone
-deletes it in the dashboard. The site going down would show it. That's why the club's
-editors are told to leave `book` alone.
+deletes it in the dashboard. The site going down would show it. That's why `book` is left
+alone when editing the club's DNS.
 
 ### What stays the same, and what changes
 
 | Stays the same | Changes |
 |---|---|
 | Weebly hosts the public site | The domain's nameservers point to Cloudflare |
-| The email provider and mailboxes | The club edits DNS in the Cloudflare dashboard instead of at the old DNS host |
+| The email provider and mailboxes | DNS changes are made in the Cloudflare dashboard (by the owner) instead of at the old DNS host |
 | Where the domain is registered and renewed | New name: `book.pastimeathleticclub.org`, owned by this project |
 
 ### Who does what
@@ -81,10 +77,10 @@ editors are told to leave `book` alone.
   registrar or the Cloudflare dashboard. Never changes nameservers, DNSSEC, DNS records, or
   GitHub settings, variables or secrets.
 - **Owner:** the registrar (DNSSEC, nameservers), setting up the zone and copying the records
-  in the Cloudflare dashboard, inviting any club DNS editor, API token permissions, the
+  in the Cloudflare dashboard, any later DNS change, API token permissions, the
   `SITE_HOSTNAME` GitHub variable, reviewing and merging PRs, and approving deploys.
-- **Club:** answers the questions in step 0, and edits its own DNS after the move. Whoever
-  edits the Weebly site adds the menu link (step 7).
+- **Club:** answers the questions in step 0. Whoever edits the Weebly site adds the menu
+  link (step 7).
 
 ## 2. The steps
 
@@ -242,6 +238,38 @@ untouched. The same delay of up to 24 hours applies.
 Once step 6 passes, whoever edits the Weebly site adds a menu item **Member Booking** that
 links to `https://book.pastimeathleticclub.org`.
 
+### Step 8 (optional, after launch): email authentication for the club's Google email
+
+These records help receiving mail servers tell real club email from fakes. The booking site
+doesn't need them, since it sends no email. They're the club's records, so the owner adds
+them in the Cloudflare dashboard, not Terraform.
+
+Do this only after step 5 has passed, and one record at a time, re-running the step 1 test
+emails after each one.
+
+1. **SPF** (a TXT record on the bare domain). It lists who may send mail as the club. First
+   list every sender from step 0, question 4: Google, plus any newsletter tool or form
+   service that sends *as* a club address. All of them go in **one** SPF record; a domain
+   must not have two. For Google only, Google's published value is
+   `v=spf1 include:_spf.google.com ~all`. `~all` means "probably not us", a soft start.
+2. **DKIM** (a TXT record that Google gives you). In Google Admin, under Gmail's "Authenticate
+   email" setting, generate a DKIM record. Add it in Cloudflare with exactly the name and
+   value Google shows (the name ends in `._domainkey`). Check it with `dig TXT` on that
+   name. Then go back to Google Admin and start authentication.
+3. **DMARC** (a TXT record at `_dmarc`). Start with `p=none`: mail is delivered as before,
+   and receivers only send reports. For example:
+   `v=DMARC1; p=none; rua=mailto:<club address for reports>`. For the reports, either use a
+   club mailbox, or Cloudflare's DMARC Management. It's available on all plans with
+   Cloudflare DNS, and it shows which sources pass SPF and DKIM. Follow its own setup
+   screen for the report address.
+
+Watch the reports for a few weeks. Moving later from `p=none` to `p=quarantine` is a
+separate decision for the owner, once every real sender passes.
+
+Cloudflare's docs cover what these records are, but not Google's values. Google's own help
+in Google Admin is the authority for the SPF and DKIM values, so check them there when
+doing this step.
+
 ## 3. Sources
 
 | Fact | Source |
@@ -257,6 +285,6 @@ links to `https://book.pastimeathleticclub.org`.
 | An exact record beats a wildcard for that name; DNS-only wildcards on all plans | developers.cloudflare.com/dns/manage-dns-records/reference/wildcard-dns-records/ |
 | Cloudflare adds CAA records automatically for Universal SSL, not for Advanced Certificates | developers.cloudflare.com/ssl/edge-certificates/caa-records/ |
 | CAA values per certificate authority; which ones issue Advanced Certificates | developers.cloudflare.com/ssl/reference/certificate-authorities/ |
-| The "Domain DNS" role; domain-scoped roles | developers.cloudflare.com/fundamentals/manage-members/roles/ |
+| What SPF, DKIM and DMARC records are; DMARC Management (all plans, with Cloudflare DNS) | developers.cloudflare.com/dns/manage-dns-records/reference/dns-record-types/, developers.cloudflare.com/dmarc-management/ |
 | API tokens can be limited to one zone | developers.cloudflare.com/fundamentals/api/get-started/create-token/ |
 | `cloudflare_workers_custom_domain` (`hostname`, `service`, `zone_id`/`zone_name`; Workers Scripts permissions); `cloudflare_dns_record` | github.com/cloudflare/terraform-provider-cloudflare, `docs/resources/`, v5.29.0 |

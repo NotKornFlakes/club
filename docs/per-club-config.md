@@ -84,7 +84,9 @@ CI, so a threshold can't be added by accident.
   custom domain. The `SITE_HOSTNAME` GitHub variable then retires (the owner removes it).
   The smoke test reads the hostname from the config too.
 
-## Decisions for the owner (each with a recommendation)
+## Decisions for the owner
+
+1, 2, 3 and 5 were agreed on 2026-11-28, as recommended. 4 is still open.
 
 1. **Resources and hours.** Today they live in the database and are edited on the admin
    pages. **Recommended:** the config holds the starting list, loaded once into an empty
@@ -98,9 +100,9 @@ CI, so a threshold can't be added by accident.
 3. **Time zone in the config.** It wasn't on the list, but it's club-specific.
    **Recommended:** yes. The nightly clean-up time (now picked for New York) then follows
    it.
-4. **Rules text.** **Recommended:** one copy in the config, with the numbers filled in from
-   the limits (for example `{cancel_hours}`). Then the text can't disagree with the actual
-   rules.
+4. **Rules text. (Open.)** **Recommended:** one copy in the config, with the numbers filled
+   in from the limits (for example `{cancel_hours}`). Then the text can't disagree with the
+   actual rules.
 5. **How other clubs run it.** **Recommended:** one separate deployment per club, each with
    its own Cloudflare account, database, secrets and admin. That keeps each club's member
    data apart and leaves the threat model as it is. Not one shared site for many clubs.
