@@ -3,15 +3,22 @@
 Read this at the start of every session. It is the source of truth for scope and decisions.
 
 ## Overview
-Secure, simple booking website for a private members club (500–1,000 members, mostly
-non-technical). Replaces the club's old WordPress site, which is shut down.
+Secure, simple booking website for Pastime Athletic Club, a private members club in
+Syracuse, NY (500–1,000 members, mostly non-technical). The club's old WordPress site is
+shut down. The club's public website stays on Weebly (pastimeathleticclub.org); this
+project is only the member booking site, at book.pastimeathleticclub.org.
 
-Same pattern as my portfolio repo: everything in Terraform, GitHub Actions CI, changes
+Product direction: I plan to offer this to other clubs. Pastime is the first. Everything
+club-specific moves into one config file per club (planned in `docs/per-club-config.md`).
+
+Same pattern as my portfolio repo: everything in Terraform (except the club's own DNS
+records; see Launch plan), GitHub Actions CI, changes
 merged only via PR that I approve (MFA on), no secrets in the repo. No Microsoft services
 other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs.
 
 ## Stack (decided)
-- Cloudflare only, in a NEW Cloudflare account owned by the club (me + backup admin as members).
+- Cloudflare only, in a NEW Cloudflare account owned by the club. I'm the only member.
+  Emergency access is the shared Proton Pass vault (see Admin).
 - ONE Worker serves both the static pages and `/api/*` from a single origin
   (not Pages + Worker: SameSite=Strict cookies break across pages.dev/workers.dev,
   and Terraform can't upload Pages assets).
@@ -28,13 +35,20 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - Workers Paid plan ($5/month) needed for PIN hashing CPU time: Free allows 10 ms CPU per
   request, Paid defaults to 30 s (developers.cloudflare.com/workers/platform/limits/).
   [confirm with management]
-- Worker sets all security headers itself until the custom domain/zone is added.
+- Worker sets all security headers itself, also after launch: the zone and its settings
+  belong to the club, not this project.
 - Plain HTML/CSS/JS, mobile-first, large buttons, simple wording.
-- Use the workers.dev URL until I add the club's domain at the end.
+- Use the workers.dev URL until launch, then book.pastimeathleticclub.org (see Launch plan).
 
 ## Public vs. private
-- Public: simple home page (club name, contact, "Member login"), Rules page.
+- Public: simple landing page (club name, contact, "Member login", a link back to
+  pastimeathleticclub.org), Rules page. The main public website is the Weebly site; the
+  booking site doesn't duplicate it.
 - Everything else requires login.
+
+## Out of scope
+- Banquet hall rentals.
+- Payments of any kind.
 
 ## Member login (no email, no signup)
 - Members already have member numbers. Login = member number + 6-digit PIN that I issue.
@@ -43,7 +57,8 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
   (verified: github.com/cloudflare/workerd, `src/workerd/io/limit-enforcer.h`).
 - IP addresses (for rate limiting) are stored only as HMAC-SHA256 with a separate secret key,
   `IP_HASH_KEY` (Worker secret, same handling as the pepper). Never raw, never a plain hash.
-- Both admins keep copies of the pepper and the IP-hash key in their password managers.
+- Copies of the pepper and the IP-hash key are kept in the shared Proton Pass vault
+  (emergency access, see Admin).
 - Lockouts are timed and escalating (15 min → 1 hour → 24 hours), never permanent.
   Admin can clear a lockout. Rate-limit per member number and per IP.
   Accepted risk: anyone who knows a member number can lock that member out for up to 24 h.
@@ -57,8 +72,9 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - PIN sheets can only be printed at import/reset time (PINs are hashed; lost PIN = reset).
 
 ## Booking rules
-- Resources: basketball court, [room names]. Open hours: [hours], configurable per
-  resource, in America/New_York local time (stays correct across DST).
+- Resources: basketball court, [room names]; possibly bowling lanes (pending club answer).
+  Open hours: [hours], configurable per resource, in America/New_York local time (stays
+  correct across DST).
 - 15-minute blocks; a booking is 1+ consecutive blocks, max 2 hours.
 - Max 2 upcoming bookings per member (a booking counts until it ends).
 - Book up to 30 days ahead (rolling 30 days, not calendar months). Show it to members as
@@ -93,7 +109,11 @@ Rules page linked in the footer:
 > - Please book only the time you'll use, so other members get a turn.
 > - Your member number and PIN are for you only. Don't share them.
 
-## Admin (me + one backup admin)
+## Admin (me only)
+- There is no backup admin. Emergency access: a Proton Pass vault shared between me and one
+  club officer.
+- The admin limit is a per-club config setting: default 2 (room for a future helper).
+  Pastime uses 1.
 - Separate admin login: strong password + TOTP 2FA. Separate cookie, 12-hour sessions.
 - Create/edit resources, hours, and club events.
 - Place one-off bookings with no date limit, and recurring blocks (leagues), both
@@ -130,20 +150,49 @@ Rules page linked in the footer:
   the D1 database ever leaked, hashing alone would not stop someone trying every PIN
   offline. The pepper, kept outside D1, is what protects PINs in that case.
 
-## Club details (to fill in)
-- Club name: [ ]
+## Club details
+- Club name: Pastime Athletic Club
+- Location: Syracuse, NY. Founded 1892.
+- Mission: health, wellness, charity and sport.
+- Public website: pastimeathleticclub.org, on Weebly, and it stays there. Its menu gets a
+  "Member Booking" link to the booking site.
+- Booking site: book.pastimeathleticclub.org (workers.dev address until launch).
 - Contact: [ ]
 - Rooms: [ ]
+- Bowling lanes: [pending club answer]
 - Hours: [ ]
+- With the per-club config PR, these values move to `clubs/pastime/club.json`.
+
+## Launch plan (custom domain)
+- A Worker custom domain needs the domain to be an active zone on Cloudflare. Moving only
+  one name (partial or subdomain setup) needs a Business or Enterprise plan. So all of
+  pastimeathleticclub.org's DNS moves to the club's Cloudflare account ("full setup").
+- The Weebly site and email must keep working: every existing DNS record is copied
+  exactly, as "DNS only", before the nameservers change. The only new name is `book`.
+- After the move, the zone and all existing records belong to the club and are edited in the
+  Cloudflare dashboard. No club DNS accounts: the club's DNS rarely changes, and any
+  future change is a small task I do.
+- Optional after launch: SPF, DKIM and DMARC (`p=none` first) for the club's Google email
+  (`docs/launch-dns.md`, step 8).
+- Terraform manages ONLY what this project needs: the `book` custom domain, plus CAA
+  records if ever needed. It never creates or imports the zone or the club's records, so
+  the drift check never sees them. A CI check enforces this.
+- Step-by-step plan, checks and rollback: `docs/launch-dns.md`.
+- No DNS, nameserver or registrar changes until I say go. The registrar side (DNSSEC,
+  nameservers) is mine alone.
 
 ## How to work
 1. Propose the architecture and D1 schema and wait for my approval before writing code.
 2. Build in small PRs: infra → member auth → availability view → booking →
-   no-shows and suspensions → admin → hardening → custom domain.
+   no-shows and suspensions → admin → hardening → per-club config (after the stacked PRs
+   merge; `docs/per-club-config.md`) → custom domain (after the DNS move).
 3. Explain each step in plain language. I'm learning as we go.
 4. README: setup, issuing/resetting PINs, adding leagues, suspending a member,
    threat model, and a one-page "How to book" guide for members.
 5. Only cite official sources (developers.cloudflare.com, github.com, owasp.org).
+   Exception: Google's help (support.google.com, and knowledge.workspace.google.com where
+   its Workspace pages now redirect), for the Google email-record step only
+   (`docs/launch-dns.md`, step 8).
 6. Claude never merges PRs, never approves PRs or deployments, and never changes repo
    settings, rulesets, environments or secrets. Only the owner does these, in the GitHub web
    UI. Claude may read settings (GET requests) to verify them.
@@ -159,3 +208,5 @@ Rules page linked in the footer:
 - [x] Architecture + D1 schema approved 2026-11-26, with changes (`docs/architecture.md`)
 - [ ] Branch ruleset + `production` environment reviewer set up (before the first merge)
 - [ ] Build steps (see How to work)
+- [ ] Per-club config (planned in `docs/per-club-config.md`; not built yet)
+- [ ] DNS move and custom domain (planned in `docs/launch-dns.md`; nothing changed yet)
