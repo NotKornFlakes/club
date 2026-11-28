@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-club-title>Dashboard – Admin</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
+  <script type="module" src="/js/admin/index.js"></script>
+</head>
+<body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="topbar">
+    <nav aria-label="Admin">
+      <a href="/admin/" aria-current="page">Dashboard</a>
+      <a href="/admin/members">Members</a>
+      <a href="/admin/schedule">Schedule</a>
+      <a href="/admin/leagues">Leagues</a>
+      <a href="/admin/resources">Courts & rooms</a>
+      <a href="/admin/events">Club events</a>
+      <a href="/admin/audit">Audit log</a>
+      <button type="button" class="link-button" data-logout>Log out</button>
+    </nav>
+  </header>
+  <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
+  <main id="main">
+    <h1>Admin</h1>
+    <p class="lead">Logged in as <strong id="username">…</strong>.</p>
+    <section aria-labelledby="alarm-title">
+      <h2 id="alarm-title">Login alarm</h2>
+      <p id="alarm-status">…</p>
+      <p id="failures" class="help"></p>
+      <div class="actions">
+        <button type="button" class="button button-secondary" id="alarm-on">Turn alarm on now</button>
+        <button type="button" class="button button-secondary" id="alarm-off">Turn alarm off</button>
+      </div>
+      <p class="help">Turning it on makes every login show the Turnstile check for a while (useful
+        to test Turnstile, or if you see an attack starting). It switches off by itself.</p>
+      <h3>Recent alarms</h3>
+      <ul id="alarm-history"></ul>
+    </section>
+    <section aria-labelledby="admins-title">
+      <h2 id="admins-title">Admins</h2>
+      <p class="help">If the other admin loses their password or authenticator, reset their login here
+        and give them the new details in person.</p>
+      <div id="admins"></div>
+      <div id="admin-reset" class="card" hidden></div>
+    </section>
+    <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
+  </main>
+</body>
+</html>

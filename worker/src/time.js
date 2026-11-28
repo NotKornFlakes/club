@@ -1,9 +1,12 @@
 // @ts-check
 // Club time. Everything is stored as Unix seconds (UTC). Open hours, league times and club
-// dates are local America/New_York values, converted per date with Intl so they stay right
-// across daylight saving changes. See docs/architecture.md, section 6 "Time".
+// dates are local values in the club's time zone (its settings file), converted per date
+// with Intl so they stay right across daylight saving changes. See docs/architecture.md,
+// section 6 "Time".
 
-export const CLUB_TIME_ZONE = "America/New_York";
+import { CLUB } from "./club.js";
+
+export const CLUB_TIME_ZONE = CLUB.time_zone;
 export const SLOT_SECONDS = 900; // 15 minutes
 export const DAY_SECONDS = 86_400;
 
@@ -47,7 +50,7 @@ function pad(n) {
   return String(n).padStart(2, "0");
 }
 
-/** Club time minus UTC, in seconds, at a moment (e.g. -18000 in winter). @param {number} unixSeconds */
+/** Club time minus UTC, in seconds, at a moment (e.g. -18000 for New York in winter). @param {number} unixSeconds */
 function offsetAt(unixSeconds) {
   const p = clubParts(unixSeconds);
   const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) / 1000;
@@ -116,4 +119,16 @@ export function nextSlot(unixSeconds) {
 /** Whole days from one club date to another. @param {string} from @param {string} to */
 export function daysBetween(from, to) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / (DAY_SECONDS * 1000));
+}
+
+/**
+ * The same day-of-month some months later (or the month's last day if it's shorter).
+ * @param {string} date YYYY-MM-DD @param {number} months
+ */
+export function addMonths(date, months) {
+  const [y, mo, d] = date.split("-").map(Number);
+  const target = new Date(Date.UTC(y ?? 0, (mo ?? 1) - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d ?? 1, lastDay));
+  return target.toISOString().slice(0, 10);
 }

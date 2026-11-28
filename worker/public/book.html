@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-club-title>Book a time</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
+  <script type="module" src="/js/book.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="topbar">
+    <nav aria-label="Main">
+      <a href="/app">My bookings</a>
+      <a href="/book" aria-current="page">Book</a>
+      <a href="/events">Club events</a>
+      <button type="button" class="link-button" data-logout>Log out</button>
+    </nav>
+  </header>
+  <main id="main">
+    <h1>Book a time</h1>
+    <p class="lead">You can book up to <span data-club="days_ahead"></span> ahead, in 15-minute
+      blocks, for up to <span data-club="max_length"></span>.</p>
+
+    <div id="suspended" class="message message-error" role="status" hidden></div>
+    <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
+
+    <section id="pick" aria-labelledby="step-place">
+      <h2 id="step-place">1. Choose a place</h2>
+      <fieldset class="choices" id="resources">
+        <legend class="visually-hidden">Court or room</legend>
+      </fieldset>
+
+      <h2 id="step-day">2. Choose a day</h2>
+      <div class="day-picker">
+        <button type="button" class="button button-secondary" id="prev-day" aria-label="Earlier day">◀</button>
+        <label for="date" class="visually-hidden">Date</label>
+        <input id="date" type="date">
+        <button type="button" class="button button-secondary" id="next-day" aria-label="Later day">▶</button>
+      </div>
+      <p id="day-label" class="day-label" aria-live="polite"></p>
+
+      <h2 id="step-time">3. Choose a start time</h2>
+      <p class="legend"><span class="swatch swatch-free"></span> Free <span class="swatch swatch-taken"></span> Taken</p>
+      <ul id="slots" class="slots" aria-labelledby="step-time"></ul>
+    </section>
+
+    <section id="confirm" hidden aria-labelledby="confirm-title"></section>
+    <section id="done" hidden aria-labelledby="done-title"></section>
+  </main>
+  <footer>
+    <a href="/rules">Booking rules</a>
+  </footer>
+</body>
+</html>

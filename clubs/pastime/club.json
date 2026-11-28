@@ -1,0 +1,30 @@
+{
+  "name": "Pastime Athletic Club",
+  "intro": "Book the gymnasium and club rooms.",
+  "address": "[Street address], Syracuse, NY [ZIP code]",
+  "contact": "[Contact details]",
+  "website": "https://pastimeathleticclub.org",
+  "time_zone": "America/New_York",
+  "max_admins": 1,
+  "colors": {
+    "light": { "accent": "#4a5560", "accent_text": "#ffffff" },
+    "dark": { "accent": "#b4bec8", "accent_text": "#0a0a0a" }
+  },
+  "booking": {
+    "max_length_minutes": 120,
+    "max_upcoming": 2,
+    "days_ahead": 30,
+    "cancel_cutoff_hours": 24,
+    "suspension_months": 6,
+    "missed_bookings_limit": 3
+  },
+  "rules": [
+    "Bookings can be cancelled up to {cancel_cutoff} before the start time. Within {cancel_cutoff}, they can't be cancelled.",
+    "If you can't make your booking, please let management know.",
+    "Missed bookings are tracked by management. Members who miss {missed_bookings} may lose booking privileges for {suspension_length}.",
+    "Please book only the time you'll use, so other members get a turn.",
+    "Your member number and PIN are for you only. Don't share them."
+  ],
+  "starting_resources": ["Gymnasium", "President's Room", "Century Room", "Lounge"],
+  "starting_hours": { "opens": "09:00", "closes": "22:00" }
+}

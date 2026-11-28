@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Fails CI if code breaks the code rules in docs/architecture.md, section 5.
+# Fails CI if code breaks the code rules in docs/architecture.md, section 5 (and rule 6 below).
 # These are tripwires for the usual mistakes, not a full parser.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 status=0
 
 # 1. SQL only through prepare(...).bind(...). No values pasted into SQL text:
-#    no template strings with ${...} and no string concatenation inside prepare().
-if grep -rnE 'prepare\(\s*`[^`]*\$\{' src; then
-  echo "::error::SQL built with a template string inside prepare(). Use ? placeholders and .bind()."
+#    no template strings with ${...} (on one line or spread over several) and no
+#    string concatenation inside prepare().
+if grep -rlPz 'prepare\(\s*`[^`]*\$\{' src; then
+  echo "::error::SQL built with a template string inside prepare() (files above). Use ? placeholders and .bind()."
   status=1
 fi
 if grep -rnE "prepare\([^)]*[\"'\`][[:space:]]*\+" src; then
@@ -26,6 +27,43 @@ fi
 #    the slot trigger handles conflicts).
 if grep -rniE 'INSERT[[:space:]]+OR[[:space:]]+(IGNORE|REPLACE)|REPLACE[[:space:]]+INTO' src; then
   echo "::error::INSERT OR IGNORE / OR REPLACE / REPLACE INTO is not allowed."
+  status=1
+fi
+
+# 4. Pages work under the strict CSP: no inline scripts, inline styles, inline event
+#    handlers or javascript: links.
+if grep -rnoE '<script[^>]*>' public --include='*.html' | grep -v 'src='; then
+  echo "::error::Inline <script> in a page. Put the code in a .js file under public/js/."
+  status=1
+fi
+if grep -rniE '<[a-z]+[^>]*[[:space:]](style|on[a-z]+)=' public --include='*.html'; then
+  echo "::error::Inline style= or on...= attribute in a page. Use styles.css and addEventListener."
+  status=1
+fi
+if grep -rniE 'javascript:' public; then
+  echo "::error::javascript: link found."
+  status=1
+fi
+
+# 5. No third-party scripts or files, except Turnstile (loaded only while the alarm is on).
+#    (The SVG namespace address in favicon.svg is a name, never fetched.)
+if grep -rnoE 'https?://[a-z0-9./-]+' public | grep -vE 'https://challenges\.cloudflare\.com|http://www\.w3\.org/2000/svg'; then
+  echo "::error::Third-party address in a page or script. Only Turnstile (challenges.cloudflare.com) is allowed."
+  status=1
+fi
+
+# 6. Club-specific values live only in the club's settings file (clubs/<club>/club.json):
+#    no club name placeholders left in pages, and no time zone written into the code.
+if grep -rnF '[Club name]' public; then
+  echo "::error::A page still says [Club name]. Use <title data-club-title> or data-club=\"name\"."
+  status=1
+fi
+if grep -rnE '"(Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific)/[A-Za-z_]+' src public scripts; then
+  echo "::error::A time zone is written into the code. It comes from the club's settings file."
+  status=1
+fi
+if grep -rniE 'pastime' src public scripts --include='*.js' --include='*.html' --include='*.css' | grep -v 'clubs/pastime/club.json'; then
+  echo "::error::The club's name is written into the code. It comes from the club's settings file."
   status=1
 fi
 

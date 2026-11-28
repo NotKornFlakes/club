@@ -1,13 +1,16 @@
 // @ts-check
-// Test data for YOUR COMPUTER ONLY: 5 fake members with known PINs, 1 test admin,
-// resources, opening hours, a few bookings and club events.
+// Test data for YOUR COMPUTER ONLY: 5 fake members with known PINs, 1 test admin, the
+// club's starting courts and rooms (from its settings file), two league seasons, a few
+// bookings and club events.
 //
 // scripts/seed.mjs applies it with `wrangler d1 execute --local`; it never touches the
 // live database. Even if these rows somehow reached it, none of the logins would work:
 // the hashes are made with the fake PEPPER from .dev.vars, not the real one.
 
+import { seasonDates } from "../src/api/admin-leagues.js";
+import { CLUB } from "../src/club.js";
 import { encryptText, hashSecret, pepperKeys } from "../src/crypto.js";
-import { addDays, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
+import { addDays, addMonths, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
 
 /** Fake members. Member numbers and PINs are made up and exist only in local test data. */
 export const SEED_MEMBERS = Object.freeze([
@@ -25,6 +28,14 @@ export const SEED_ADMIN = Object.freeze({
   password: "local-test-only-admin",
   totpSecret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
 });
+
+/** Two made-up league seasons in the first room on the club's list (the gymnasium). */
+export const SEED_LEAGUES = Object.freeze([
+  { id: 1, name: "Monday charity basketball", weekday: 1, starts: "18:00", ends: "20:00" },
+  { id: 2, name: "Tuesday basketball league", weekday: 2, starts: "19:00", ends: "21:00" },
+]);
+/** How long the seed seasons run, from today. */
+export const SEED_SEASON_MONTHS = 3;
 
 /** @typedef {{ sql: string, params: Array<string | number | null> }} Statement */
 
@@ -80,23 +91,17 @@ export async function buildSeed({ pepper, now }) {
     });
   }
 
-  const resources = [
-    { id: 1, name: "Basketball court", sort: 1, hours: [[0, 6, "07:00", "22:00"]] },
-    { id: 2, name: "Room 1", sort: 2, hours: [[1, 6, "09:00", "21:00"]] },
-    { id: 3, name: "Room 2", sort: 3, hours: [[1, 5, "09:00", "12:00"], [1, 5, "14:00", "20:00"]] },
-  ];
-  for (const resource of resources) {
+  // The club's starting courts and rooms, each open its starting hours every day.
+  for (const [i, name] of CLUB.starting_resources.entries()) {
     out.push({
       sql: "INSERT INTO resources (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      params: [resource.id, resource.name, resource.sort, now, now],
+      params: [i + 1, name, i + 1, now, now],
     });
-    for (const [from, to, opens, closes] of resource.hours) {
-      for (let weekday = Number(from); weekday <= Number(to); weekday += 1) {
-        out.push({
-          sql: "INSERT INTO opening_hours (resource_id, weekday, opens_local, closes_local) VALUES (?, ?, ?, ?)",
-          params: [resource.id, weekday, opens, closes],
-        });
-      }
+    for (let weekday = 0; weekday <= 6; weekday += 1) {
+      out.push({
+        sql: "INSERT INTO opening_hours (resource_id, weekday, opens_local, closes_local) VALUES (?, ?, ?, ?)",
+        params: [i + 1, weekday, CLUB.starting_hours.opens, CLUB.starting_hours.closes],
+      });
     }
   }
 
@@ -105,21 +110,66 @@ export async function buildSeed({ pepper, now }) {
   const soon = nextSlot(now) + 3 * 3600; // within 24 hours, so it can't be cancelled
 
   const memberBookings = [
-    { member: 1, resource: 1, start: soon, end: soon + 3600 },
-    { member: 5, resource: 1, start: at(1, "18:00"), end: at(1, "19:00") },
-    { member: 4, resource: 2, start: at(2, "10:00"), end: at(2, "11:30") },
+    { id: 1, member: 1, resource: 1, start: soon, end: soon + 3600 },
+    { id: 2, member: 5, resource: 1, start: at(1, "18:00"), end: at(1, "19:00") },
+    { id: 3, member: 3, resource: 2, start: at(2, "10:00"), end: at(2, "11:30") },
   ];
   for (const b of memberBookings) {
     out.push({
-      sql: `INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at)
-            VALUES (?, 'member', ?, ?, ?, ?)`,
-      params: [b.resource, b.member, b.start, b.end, now],
+      sql: `INSERT INTO bookings (id, resource_id, kind, member_id, starts_at, ends_at, created_at)
+            VALUES (?, ?, 'member', ?, ?, ?, ?)`,
+      params: [b.id, b.resource, b.member, b.start, b.end, now],
     });
   }
+  const maintenance = { id: 4, resource: 1, start: at(3, "09:00"), end: at(3, "12:00") };
   out.push({
-    sql: `INSERT INTO bookings (resource_id, kind, label, starts_at, ends_at, created_at, created_by_admin_id)
-          VALUES (1, 'admin', 'Floor maintenance', ?, ?, ?, ?)`,
-    params: [at(3, "09:00"), at(3, "12:00"), now, SEED_ADMIN.id],
+    sql: `INSERT INTO bookings (id, resource_id, kind, label, starts_at, ends_at, created_at, created_by_admin_id)
+          VALUES (?, ?, 'admin', 'Floor maintenance', ?, ?, ?, ?)`,
+    params: [maintenance.id, maintenance.resource, maintenance.start, maintenance.end, now, SEED_ADMIN.id],
+  });
+
+  // Two league seasons, booked the way the admin page does it: every free date, and any
+  // date that clashes with a booking above is skipped and listed for the admin.
+  const taken = [...memberBookings, maintenance];
+  const seasonLast = addMonths(today, SEED_SEASON_MONTHS);
+  let leagueBookingId = 100;
+  for (const league of SEED_LEAGUES) {
+    out.push({
+      sql: `INSERT INTO leagues (id, name, resource_id, weekday, starts_local, ends_local, first_date, last_date, created_by_admin_id, created_at)
+            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      params: [league.id, league.name, league.weekday, league.starts, league.ends, today, seasonLast, SEED_ADMIN.id, now],
+    });
+    const season = { ...league, resourceId: 1, first: today, last: seasonLast, renewedFrom: null };
+    for (const d of seasonDates(season).filter((day) => day.start > now)) {
+      const clash = taken.find((b) => b.resource === 1 && b.start < d.end && d.start < b.end);
+      if (clash) {
+        out.push({
+          sql: "INSERT INTO league_skips (league_id, on_date, clashing_booking_id) VALUES (?, ?, ?)",
+          params: [league.id, d.date, clash.id],
+        });
+        continue;
+      }
+      leagueBookingId += 1;
+      out.push({
+        sql: `INSERT INTO bookings (id, resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
+              VALUES (?, 1, 'league', ?, ?, ?, ?, ?, ?)`,
+        params: [leagueBookingId, league.id, league.name, d.start, d.end, now, SEED_ADMIN.id],
+      });
+    }
+  }
+
+  // Member 1003 has two no-shows on record; member 1004 is suspended (so has no bookings).
+  for (const [days, note] of [[-20, "Court booked, nobody came."], [-75, null]]) {
+    out.push({
+      sql: "INSERT INTO no_shows (member_id, on_date, note, recorded_by_admin_id, recorded_at) VALUES (3, ?, ?, ?, ?)",
+      params: [addDays(today, Number(days)), note, SEED_ADMIN.id, now],
+    });
+  }
+  const suspendedUntil = addMonths(today, 2);
+  out.push({
+    sql: `INSERT INTO suspensions (member_id, starts_at, ends_at, reason, created_by_admin_id, created_at)
+          VALUES (4, ?, ?, '3 missed bookings (test data)', ?, ?)`,
+    params: [now, clubTimeToUtc(addDays(suspendedUntil, 1), "00:00"), SEED_ADMIN.id, now],
   });
 
   const events = [

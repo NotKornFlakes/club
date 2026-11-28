@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-club-title>Schedule – Admin</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
+  <script type="module" src="/js/admin/schedule.js"></script>
+</head>
+<body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="topbar">
+    <nav aria-label="Admin">
+      <a href="/admin/">Dashboard</a>
+      <a href="/admin/members">Members</a>
+      <a href="/admin/schedule" aria-current="page">Schedule</a>
+      <a href="/admin/leagues">Leagues</a>
+      <a href="/admin/resources">Courts & rooms</a>
+      <a href="/admin/events">Club events</a>
+      <a href="/admin/audit">Audit log</a>
+      <button type="button" class="link-button" data-logout>Log out</button>
+    </nav>
+  </header>
+  <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
+  <main id="main">
+    <h1>Schedule</h1>
+    <p class="lead">See who booked each slot, add a one-off booking, or cancel any booking.</p>
+    <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
+    <form id="pick-form" class="inline-form">
+      <label for="resource">Court or room</label>
+      <select id="resource"></select>
+      <label for="date">Date</label>
+      <input id="date" type="date" required>
+    </form>
+    <h2 id="day-title">…</h2>
+    <div id="bookings"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Time</th><th scope="col">Booked by</th></tr></thead>
+      <tbody id="slot-rows"></tbody>
+    </table></div>
+
+    <section aria-labelledby="new-title">
+      <h2 id="new-title">Add an admin booking</h2>
+      <p class="help">No date limit, and member rules don't apply. It can't overlap an existing booking:
+        cancel that one first. One booking can be at most 30 days long.</p>
+      <form id="booking-form" novalidate>
+        <label for="label">Label (only admins see it)</label>
+        <input id="label" maxlength="80" placeholder="e.g. Maintenance, Tournament">
+        <div class="two-col">
+          <div><label for="start-date">Start date</label><input id="start-date" type="date" required></div>
+          <div><label for="start-time">Start time</label><input id="start-time" type="time" step="900" required></div>
+          <div><label for="end-date">End date</label><input id="end-date" type="date" required></div>
+          <div><label for="end-time">End time</label><input id="end-time" type="time" step="900" required></div>
+        </div>
+        <button type="submit" class="button">Add booking</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

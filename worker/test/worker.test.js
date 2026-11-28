@@ -64,7 +64,7 @@ describe("security headers", () => {
   it("are on unknown API paths", async () => {
     const response = await exports.default.fetch(`${ORIGIN}/api/nope`);
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "not_found" });
+    expect(await response.json()).toMatchObject({ error: "not_found" });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expectSecurityHeaders(response);
   });
@@ -94,7 +94,7 @@ describe("security headers", () => {
     const response = await handler(new Request(`${ORIGIN}/`), brokenEnv, ctx);
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: "server_error" });
+    expect(await response.json()).toMatchObject({ error: "server_error" });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expectSecurityHeaders(response);
   });

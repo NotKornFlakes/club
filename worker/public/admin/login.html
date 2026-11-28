@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-club-title>Log in – Admin</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
+  <script type="module" src="/js/admin/login.js"></script>
+</head>
+<body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <main id="main">
+    <h1>Admin login</h1>
+    <p id="alarm-note" class="message message-info" hidden>
+      We're seeing a lot of failed logins right now, so logging in needs one extra check.
+    </p>
+    <form id="login-form" method="post" action="/api/admin/login" novalidate>
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" maxlength="40" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="200" required>
+      <label for="totp-code">6-digit code from your authenticator app</label>
+      <input id="totp-code" name="totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+      <div id="turnstile" class="turnstile" hidden></div>
+      <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
+      <button type="submit" class="button button-wide">Log in</button>
+    </form>
+    <p class="help">Lost your password or authenticator? Ask the other admin to reset your login.</p>
+  </main>
+</body>
+</html>
