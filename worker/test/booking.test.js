@@ -280,7 +280,7 @@ describe("the kinds of booking limit a club can choose", () => {
 
   /** @param {import("../src/club-config.js").Limit} limit @param {number} memberId @param {number} start @param {number} end */
   const book = (limit, memberId, start, end, resourceId = room) =>
-    insertMemberBooking(db, limit, { resourceId, memberId, start, end, now: nowSeconds() });
+    insertMemberBooking(db, limit, { resourceIds: [resourceId], memberId, start, end, now: nowSeconds() });
   /** @param {number} id */
   const cancel = (id) =>
     db.prepare("UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'member' WHERE id = ?").bind(nowSeconds(), id).run();

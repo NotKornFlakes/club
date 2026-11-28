@@ -22,7 +22,7 @@ const MAX_PROGRAMS = 26;
 
 /**
  * @typedef {{
- *   area: { id: string, name: string, any_label: string | null },
+ *   area: { id: string, name: string, any_label: string | null, lanes: { max_per_booking: number } | null },
  *   areas: Array<{ id: string, name: string }>,
  *   resources: Array<{ id: number, name: string }>,
  *   from: string, today: string, now: number, prev: string | null, next: string | null,
@@ -141,7 +141,7 @@ export async function weekView(db, { area, from, now }) {
   }
 
   return {
-    area: { id: def.id, name: def.name, any_label: def.any_label },
+    area: { id: def.id, name: def.name, any_label: def.any_label, lanes: def.lanes },
     areas: CLUB.areas.map((a) => ({ id: a.id, name: a.name })),
     resources,
     from,

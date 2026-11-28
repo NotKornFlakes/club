@@ -166,6 +166,9 @@ describe("another club's settings", () => {
     refused((c) => (c.contact.map = "http://example.org/map"));
     refused((c) => (c.contact.links = [{ label: "Site", url: "javascript:alert(1)" }]));
     refused((c) => (c.areas = [{ id: "Gym!", name: "Gym" }]));
+    refused((c) => (c.areas[1].lanes = { max_per_booking: 0 }));
+    refused((c) => (c.areas[1].lanes = { max_per_booking: 9 }));
+    refused((c) => (c.areas[1].lanes = { max: 2 }));
     refused((c) => (c.areas = [{ id: "gym", name: "Gym" }, { id: "gym", name: "Again" }]));
     refused((c) => (c.starting_resources = [{ name: "Court", area: "nowhere" }]));
     refused((c) => (c.colors.brand.highlight = "gold"));

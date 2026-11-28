@@ -108,8 +108,19 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - This Week and Book show a full week: days across, hours down, previous/next week. Phone:
   one day at a time, swipeable, with day tabs. Switcher: Gym · Bowling lanes · Rooms.
   Logged out: view only, with "Log in to book". Logged in: tap a free time for the
-  booking sheet (start in 15-minute steps, length up to 2 hours). Bowling: a lane or
-  "any lane".
+  booking sheet (start in 15-minute steps, length up to 2 hours).
+- Bowling (decided 2026-11-28):
+  - The week view shows free lanes per hour as a count ("5 of 8 lanes free"), shaded by how
+    full it is; not one row per lane.
+  - Tapping an hour opens a day view: Lanes 1–8 as labelled columns. Taken cells say
+    "Taken"; free cells can be tapped. On a phone, it scrolls sideways with the lane
+    names and times pinned.
+  - Members book 1–2 lanes in one booking.
+  - Editors and admins can book all 8 lanes in one action, one-off or as a recurring
+    season like a league. This Week shows it as one block ("Friday League — all lanes").
+    (Built for admins; editors get it with the editor role.)
+  - Whole-alley requests from members go through the party/banquet request form, not
+    self-booking. Until that form exists (step 5), they call or email the club.
 - The current site's text and photos (and the crest) are drafts for the demo, kept in
   `clubs/pastime/drafts/` (gitignored). Never commit or publish them until the club gives
   permission.

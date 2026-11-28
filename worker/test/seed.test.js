@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptText, pepperKeys, verifySecret } from "../src/crypto.js";
-import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
+import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_ALLEY_LEAGUE, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
 import seedScript from "../scripts/seed.mjs?raw";
 import { CLUB } from "../src/club.js";
 import wranglerConfig from "../wrangler.json";
@@ -58,7 +58,7 @@ describe("local seed data", () => {
     expect(counts).toMatchObject({
       resources: CLUB.starting_resources.length,
       hours: CLUB.starting_resources.length * 7,
-      bookings: 7,
+      bookings: 8,
       events: 2,
       no_shows: 2,
       suspensions: 1,
@@ -73,7 +73,8 @@ describe("local seed data", () => {
   });
 
   it("has four programs (public) and two leagues (private) in the gym, booked every week", async () => {
-    const { results: rows } = await db.prepare("SELECT l.id, l.name, l.public, r.area FROM leagues l JOIN resources r ON r.id = l.resource_id ORDER BY l.id").all();
+    const { results: all } = await db.prepare("SELECT l.id, l.name, l.public, l.whole_area, r.area FROM leagues l JOIN resources r ON r.id = l.resource_id ORDER BY l.id").all();
+    const rows = all.filter((r) => r.whole_area === 0);
     const seasons = [...SEED_PROGRAMS.map((p) => ({ ...p, public: 1 })), ...SEED_LEAGUES.map((l) => ({ ...l, public: 0 }))];
     expect(rows.map((r) => [r.name, r.public])).toEqual(seasons.flatMap((x) => x.weekdays.map(() => [x.name, x.public])));
     expect(SEED_PROGRAMS.map((p) => p.name)).toEqual(["Pickleball", "Open gym", "Ping Pong", "Youth"]);
@@ -83,6 +84,25 @@ describe("local seed data", () => {
       // About 13 weeks in a 3-month season (today's may already have passed).
       expect(Number(n?.n), String(row.name)).toBeGreaterThanOrEqual(12);
     }
+  });
+
+  it("has a Friday League on all 8 bowling lanes, shown by name", async () => {
+    const league = await db.prepare("SELECT l.id, l.public, r.area FROM leagues l JOIN resources r ON r.id = l.resource_id WHERE l.name = ?").bind(SEED_ALLEY_LEAGUE.name).first();
+    expect(league).toMatchObject({ public: 1, area: "bowling" });
+    const per = await db
+      .prepare("SELECT COUNT(DISTINCT resource_id) AS lanes, COUNT(*) AS n FROM bookings WHERE league_id = ?")
+      .bind(league?.id)
+      .first();
+    expect(per?.lanes).toBe(8);
+    expect(Number(per?.n)).toBeGreaterThanOrEqual(12 * 8);
+  });
+
+  it("has a member booking two lanes as one booking", async () => {
+    const { results } = await db.prepare("SELECT id, group_id, member_id FROM bookings WHERE id IN (5, 8) ORDER BY id").all();
+    expect(results).toEqual([
+      { id: 5, group_id: null, member_id: 2 },
+      { id: 8, group_id: 5, member_id: 2 },
+    ]);
   });
 
   it("gives member 1001 three upcoming bookings (Pastime has no limit)", async () => {

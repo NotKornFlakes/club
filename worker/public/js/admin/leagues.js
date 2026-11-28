@@ -2,7 +2,7 @@
 // Admin: league seasons. Create one (clashing dates are skipped and listed), see clash
 // lists, renew when a season ends, or cancel (frees its future dates).
 import { api, byId, el, formatClubDate } from "../common.js";
-import { addDays, clubToday, showError, showOk, start } from "./admin.js";
+import { addDays, clubToday, showError, showOk, start, wholeAreaChoice } from "./admin.js";
 
 /** @param {string} id */
 const value = (id) => /** @type {HTMLInputElement} */ (byId(id)).value.trim();
@@ -109,6 +109,7 @@ byId("league-form").addEventListener("submit", async (event) => {
         first_date: value("first"),
         last_date: value("last"),
         public: /** @type {HTMLInputElement} */ (byId("public")).checked,
+        whole_area: /** @type {HTMLInputElement} */ (byId("whole-area")).checked,
       },
     });
     showResult(`${value("name")}: season created`, result);
@@ -122,6 +123,12 @@ try {
   await start();
   const { resources } = await api("/api/admin/resources");
   byId("resource").replaceChildren(...resources.filter((/** @type {{ active: boolean }} */ r) => r.active).map((/** @type {{ id: number, name: string }} */ r) => el("option", { value: r.id, text: r.name })));
+  /** @type {Map<number, string>} */
+  const areaOf = new Map(resources.map((/** @type {{ id: number, area: string }} */ r) => [Number(r.id), String(r.area)]));
+  const select = /** @type {HTMLSelectElement} */ (byId("resource"));
+  const wording = "Every one of the {area} (a whole-alley league)";
+  wholeAreaChoice(select, areaOf, wording);
+  select.addEventListener("change", () => wholeAreaChoice(select, areaOf, wording));
   const first = /** @type {HTMLInputElement} */ (byId("first"));
   first.value = addDays(clubToday(), 1);
   first.min = clubToday();

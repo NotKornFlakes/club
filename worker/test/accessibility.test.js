@@ -131,6 +131,7 @@ describe("colour contrast (WCAG AA)", () => {
     ["muted", "surface", 4.5],
     ["accent", "surface", 4.5],
     ...["gold", "blue", "green", "rose", "lilac", "teal"].map((c) => ["program-text", `program-${c}`, 4.5]),
+    ...["empty", "half", "busy", "full"].map((c) => ["text", `lanes-${c}`, 4.5]),
   ];
 
   it.each(["light", "dark"])("passes in %s mode", (scheme) => {

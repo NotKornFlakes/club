@@ -44,6 +44,8 @@ export const SEED_LEAGUES = Object.freeze([
   { name: "Monday charity basketball", weekdays: [1], starts: "18:00", ends: "20:00" },
   { name: "Tuesday basketball league", weekdays: [2], starts: "19:00", ends: "21:00" },
 ]);
+/** A made-up league on every bowling lane, shown by name: "Friday League — all lanes". */
+export const SEED_ALLEY_LEAGUE = Object.freeze({ name: "Friday League", weekdays: [5], starts: "19:00", ends: "22:00" });
 /** How long the seed seasons run, from today. */
 export const SEED_SEASON_MONTHS = 3;
 
@@ -130,23 +132,31 @@ export async function buildSeed({ pepper, now }) {
   const seasonLast = addMonths(today, SEED_SEASON_MONTHS);
   let leagueId = 0;
   let leagueBookingId = 100;
-  for (const [group, isPublic] of /** @type {const} */ ([[SEED_PROGRAMS, 1], [SEED_LEAGUES, 0]])) {
+  // [seasons, public, the resources each date books (the first is the league's resource)]
+  const groups = /** @type {Array<[ReadonlyArray<{ name: string, weekdays: number[], starts: string, ends: string }>, number, number[]]>} */ ([
+    [SEED_PROGRAMS, 1, [gym]],
+    [SEED_LEAGUES, 0, [gym]],
+    ...(lanes.length ? [[[SEED_ALLEY_LEAGUE], 1, lanes]] : []),
+  ]);
+  for (const [group, isPublic, ids] of groups) {
     for (const season of group) {
       for (const weekday of season.weekdays) {
         leagueId += 1;
         out.push({
-          sql: `INSERT INTO leagues (id, name, resource_id, weekday, starts_local, ends_local, first_date, last_date, public, created_by_admin_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          params: [leagueId, season.name, gym, weekday, season.starts, season.ends, today, seasonLast, isPublic, SEED_ADMIN.id, now],
+          sql: `INSERT INTO leagues (id, name, resource_id, weekday, starts_local, ends_local, first_date, last_date, public, whole_area, created_by_admin_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [leagueId, season.name, ids[0] ?? gym, weekday, season.starts, season.ends, today, seasonLast, isPublic, ids.length > 1 ? 1 : 0, SEED_ADMIN.id, now],
         });
-        const dates = seasonDates({ ...season, weekday, resourceId: gym, first: today, last: seasonLast, renewedFrom: null, isPublic: isPublic === 1 });
+        const dates = seasonDates({ ...season, weekday, resourceId: ids[0] ?? gym, first: today, last: seasonLast, renewedFrom: null, isPublic: isPublic === 1 });
         for (const d of dates.filter((day) => day.start > now)) {
-          leagueBookingId += 1;
-          out.push({
-            sql: `INSERT INTO bookings (id, resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
-                  VALUES (?, ?, 'league', ?, ?, ?, ?, ?, ?)`,
-            params: [leagueBookingId, gym, leagueId, season.name, d.start, d.end, now, SEED_ADMIN.id],
-          });
+          for (const id of ids) {
+            leagueBookingId += 1;
+            out.push({
+              sql: `INSERT INTO bookings (id, resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
+                    VALUES (?, ?, 'league', ?, ?, ?, ?, ?, ?)`,
+              params: [leagueBookingId, id, leagueId, season.name, d.start, d.end, now, SEED_ADMIN.id],
+            });
+          }
         }
       }
     }
@@ -157,17 +167,25 @@ export async function buildSeed({ pepper, now }) {
   // settings now have no limit.
   const memberBookings = [
     { id: 1, member: 1, resource: rooms[0] ?? gym, start: soon, end: soon + 3600 },
-    { id: 6, member: 1, resource: lanes[0] ?? gym, start: at(4, "18:00"), end: at(4, "19:00") },
+    { id: 6, member: 1, resource: lanes[0] ?? gym, start: at(4, "17:00"), end: at(4, "18:00") },
     { id: 7, member: 1, resource: rooms[2] ?? rooms[0] ?? gym, start: at(6, "10:00"), end: at(6, "12:00") },
     { id: 2, member: 5, resource: gym, start: at(1, "21:00"), end: at(1, "22:00") },
     { id: 3, member: 3, resource: rooms[1] ?? rooms[0] ?? gym, start: at(2, "10:00"), end: at(2, "11:30") },
-    { id: 5, member: 2, resource: lanes[2] ?? gym, start: at(3, "19:00"), end: at(3, "20:00") },
+    // Two lanes in one booking (the second lane's row, id 8, points at this one).
+    { id: 5, member: 2, resource: lanes[2] ?? gym, start: at(3, "16:00"), end: at(3, "17:00") },
   ];
   for (const b of memberBookings) {
     out.push({
       sql: `INSERT INTO bookings (id, resource_id, kind, member_id, starts_at, ends_at, created_at)
             VALUES (?, ?, 'member', ?, ?, ?, ?)`,
       params: [b.id, b.resource, b.member, b.start, b.end, now],
+    });
+  }
+  if (lanes[3]) {
+    out.push({
+      sql: `INSERT INTO bookings (id, resource_id, kind, member_id, starts_at, ends_at, created_at, group_id)
+            VALUES (8, ?, 'member', 2, ?, ?, ?, 5)`,
+      params: [lanes[3], at(3, "16:00"), at(3, "17:00"), now],
     });
   }
   const maintenance = { id: 4, resource: lanes.at(-1) ?? gym, start: at(3, "09:00"), end: at(3, "12:00") };

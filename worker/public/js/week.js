@@ -12,6 +12,7 @@
 // through element.style (CSSOM), which the strict CSP allows.
 
 import { ApiError, CLUB, api, byId, el, formatDate, formatTime, say, sessionOrNull, wireLogout } from "./common.js";
+import { dayCells, fullness, longest, toggleLane } from "./lanes.js";
 
 const root = byId("week");
 const sheet = /** @type {HTMLDialogElement} */ (byId("sheet"));
@@ -25,7 +26,8 @@ const PALETTE = 6;
 /**
  * @typedef {{ date: string, weekday: number, starts: number[], slots: Record<string, string> }} Day
  * @typedef {{
- *   area: { id: string, name: string, any_label: string | null }, areas: Array<{ id: string, name: string }>,
+ *   area: { id: string, name: string, any_label: string | null, lanes: { max_per_booking: number } | null },
+ *   areas: Array<{ id: string, name: string }>,
  *   resources: Array<{ id: number, name: string }>, from: string, today: string, now: number,
  *   prev: string | null, next: string | null, last_book_date: string,
  *   grid: { start: string, end: string, slot_minutes: number } | null, programs: string[], days: Day[],
@@ -204,6 +206,266 @@ function dayColumn(week, day, index, colors) {
   ]);
 }
 
+// ---------- Lanes (bowling): counts per hour, and a day view with one column per lane ----------
+
+/** The lanes' state strings for a day, in lane order. @param {Week} week @param {Day} day */
+const laneStates = (week, day) => week.resources.map((r) => day.slots[String(r.id)] ?? "");
+
+/**
+ * A day for a lanes area: "5 of 8 lanes free" per hour, shaded by how full it is; a program
+ * on every lane is one block ("Friday League — all lanes"). Tapping an hour opens the lanes.
+ * @param {Week} week @param {Day} day @param {number} index @param {Map<string, number>} colors
+ */
+function laneDayColumn(week, day, index, colors) {
+  const parts = shortParts(day.date);
+  const label = longDate.format(noon(day.date));
+  const body = el("div", { className: "day-body" });
+  const at = (/** @type {number} */ i) => day.starts[i] ?? (day.starts[i - 1] ?? 0) + SLOT;
+  for (const { start, end, cell } of dayCells(laneStates(week, day), day.starts.length)) {
+    const span = `${time(at(start))} to ${time(at(end))}`;
+    if (cell.kind === "count") {
+      const text = cell.free > 0 ? `${cell.free} of ${cell.total} lanes free` : "Partly free";
+      body.append(
+        place(
+          el(
+            "button",
+            {
+              type: "button",
+              className: `block block-lanes lanes-full-${fullness(cell.free, cell.total)}`,
+              "aria-label": `${label}, ${span}: ${text}. Show the lanes.`,
+              onclick: () => openDayView(index, start),
+            },
+            [text],
+          ),
+          start,
+          end,
+        ),
+      );
+    } else if (cell.kind === "program") {
+      const name = week.programs[cell.program.charCodeAt(0) - 65] ?? "Program";
+      const past = at(end) <= week.now;
+      body.append(
+        place(
+          el("div", { className: `block block-program program-${colors.get(name) ?? 0}${past ? " block-past" : ""}`, "aria-label": `${name}, all lanes, ${span}` }, [
+            `${name} — all lanes`,
+            end - start > 1 ? el("span", { className: "block-time", text: span }) : null,
+          ]),
+          start,
+          end,
+        ),
+      );
+    } else if (cell.kind === "full") {
+      body.append(place(el("div", { className: "block block-taken", "aria-label": `All lanes taken, ${span}` }, ["All lanes taken"]), start, end));
+    } else if (cell.kind === "later") {
+      body.append(place(el("div", { className: "block block-later", "aria-label": `Open, not yet bookable, ${span}` }, ["Open"]), start, end));
+    } else if (cell.kind === "past") {
+      body.append(place(el("div", { className: "block block-taken block-past", "aria-hidden": "true" }, [end - start > 1 ? "Earlier" : ""]), start, end));
+    } else {
+      body.append(place(el("div", { className: "block block-closed", "aria-hidden": "true" }), start, end));
+    }
+  }
+  return el("div", { className: `day${day.date === week.today ? " day-today" : ""}`, id: `day-${index}`, role: "group", "aria-label": label }, [
+    el("div", { className: "day-head", "aria-hidden": "true" }, [el("strong", { text: `${parts.weekday} ${parts.day}` }), parts.month]),
+    body,
+  ]);
+}
+
+/**
+ * One day, one column per lane (Lane 1 to Lane 8), 15-minute rows. Taken times say Taken;
+ * free ones can be tapped: up to the area's max lanes, at the same start time. On a phone
+ * the grid scrolls sideways, with the lane names and times pinned.
+ * @param {number} dayIndex @param {number} focus the slot to scroll to
+ */
+function openDayView(dayIndex, focus) {
+  const week = state.data;
+  const day = week?.days[dayIndex];
+  if (!week || !day || !week.area.lanes) return;
+  const max = week.area.lanes.max_per_booking;
+  const lanes = week.resources;
+  const states = laneStates(week, day);
+  const rows = day.starts.length;
+  const startMinutes = Number(week.grid?.start.slice(0, 2) ?? 0) * 60 + Number(week.grid?.start.slice(3) ?? 0);
+  const at = (/** @type {number} */ i) => day.starts[i] ?? (day.starts[i - 1] ?? 0) + SLOT;
+  /** @type {{ start: number, lanes: number[] }} */
+  let selection = { start: -1, lanes: [] };
+
+  const grid = el("div", { className: "lane-grid", role: "group", "aria-label": `Lanes, ${longDate.format(noon(day.date))}` });
+  grid.style.setProperty("--lanes", String(lanes.length));
+  grid.style.setProperty("--rows", String(rows));
+  /** @param {HTMLElement} node @param {number} col 1 = times @param {number} row 1 = lane names */
+  const cellAt = (node, col, row, rowEnd = row + 1) => {
+    node.style.gridColumn = String(col);
+    node.style.gridRow = `${row} / ${rowEnd}`;
+    return node;
+  };
+  grid.append(cellAt(el("div", { className: "lane-corner", "aria-hidden": "true" }), 1, 1));
+  lanes.forEach((lane, i) => grid.append(cellAt(el("div", { className: "lane-head", text: lane.name }), i + 2, 1)));
+  for (let r = 0; r < rows; r += 4) {
+    grid.append(cellAt(el("div", { className: "lane-time", "aria-hidden": "true", text: hourLabel(startMinutes + r * 15) }), 1, r + 2, Math.min(rows, r + 4) + 2));
+  }
+
+  /** @type {Map<string, HTMLElement>} */
+  const buttons = new Map();
+  lanes.forEach((lane, i) => {
+    const laneString = states[i] ?? "";
+    for (const run of runsOf(laneString)) {
+      const col = i + 2;
+      const span = `${time(at(run.start))} to ${time(at(run.end))}`;
+      if (run.char === "f") {
+        for (let s = run.start; s < run.end; s += 1) {
+          const label = `${lane.name}, ${time(at(s))}`;
+          // Each free cell shows its time ("4:15"), so a phone shows what you're tapping.
+          const short = time(at(s)).replace(/\s?[AP]M$/, "");
+          const node = canBook()
+            ? el(
+                "button",
+                {
+                  type: "button",
+                  className: "lane-cell lane-free",
+                  "aria-pressed": "false",
+                  "aria-label": `${label}, free`,
+                  onclick: () => pick(lane.id, s),
+                },
+                [short],
+              )
+            : el("div", { className: "lane-cell lane-free", "aria-label": `${label}, free` }, [short]);
+          buttons.set(`${lane.id}:${s}`, node);
+          grid.append(cellAt(node, col, s + 2));
+        }
+      } else if (run.char === "t") {
+        grid.append(cellAt(el("div", { className: "lane-cell lane-taken", "aria-label": `${lane.name}, taken, ${span}` }, ["Taken"]), col, run.start + 2, run.end + 2));
+      } else if (run.char === "x") {
+        grid.append(cellAt(el("div", { className: "lane-cell lane-closed", "aria-hidden": "true" }), col, run.start + 2, run.end + 2));
+      } else if (run.char === "o") {
+        grid.append(cellAt(el("div", { className: "lane-cell lane-taken block-past", "aria-hidden": "true" }), col, run.start + 2, run.end + 2));
+      } else if (run.char === "l") {
+        grid.append(cellAt(el("div", { className: "lane-cell lane-later", "aria-label": `${lane.name}, not yet bookable, ${span}` }, ["Open"]), col, run.start + 2, run.end + 2));
+      } else {
+        const name = week.programs[run.char.charCodeAt(0) - 65] ?? "Program";
+        grid.append(cellAt(el("div", { className: "lane-cell lane-program", "aria-label": `${lane.name}, ${name}, ${span}` }, [name]), col, run.start + 2, run.end + 2));
+      }
+    }
+  });
+
+  const note = el("p", { className: "message", role: "status", hidden: true });
+  const summary = el("p", { className: "summary", "aria-live": "polite" });
+  const lengthSelect = /** @type {HTMLSelectElement} */ (el("select", { id: "lane-length" }));
+  const next = /** @type {HTMLButtonElement} */ (el("button", { type: "button", className: "button", text: "Continue", onclick: () => confirm() }));
+  const bar = el("div", { className: "lane-bar", hidden: true }, [summary, el("label", { for: "lane-length", text: "How long" }), lengthSelect, next]);
+
+  /** @param {number} laneId @param {number} s */
+  function pick(laneId, s) {
+    const result = toggleLane(selection, laneId, s, max);
+    selection = { start: result.start, lanes: result.lanes };
+    say(note, result.refused ? `You can book up to ${max} lanes at once. For more, or the whole alley, ask the club about a party.` : "", "info");
+    for (const [key, node] of buttons) {
+      const [id, slot] = key.split(":").map(Number);
+      node.setAttribute("aria-pressed", String(slot === selection.start && selection.lanes.includes(Number(id))));
+    }
+    bar.hidden = selection.lanes.length === 0;
+    if (bar.hidden) return;
+    const chosen = lanes.filter((l) => selection.lanes.includes(l.id));
+    const most = longest(chosen.map((l) => states[lanes.indexOf(l)] ?? ""), selection.start, MAX_SLOTS);
+    summary.textContent = `${chosen.map((l) => l.name).join(" and ")}, from ${time(at(selection.start))}`;
+    const keep = Number(lengthSelect.value) || 4;
+    lengthSelect.replaceChildren();
+    for (let n = 1; n <= most; n += 1) lengthSelect.append(el("option", { value: String(n), text: `${lengthText(n)} (until ${time(at(selection.start) + n * SLOT)})` }));
+    lengthSelect.value = String(Math.min(keep, most));
+  }
+
+  function confirm() {
+    const chosen = lanes.filter((l) => selection.lanes.includes(l.id));
+    const startsAt = at(selection.start);
+    const endsAt = startsAt + Number(lengthSelect.value) * SLOT;
+    bookingStep(
+      `Book ${chosen.map((l) => l.name).join(" and ")}`,
+      `${longDate.format(noon(day.date))}, ${time(startsAt)} to ${time(endsAt)}`,
+      startsAt,
+      { resource_ids: chosen.map((l) => l.id), starts_at: startsAt, ends_at: endsAt },
+      () => openDayView(dayIndex, selection.start),
+    );
+  }
+
+  const intro = canBook()
+    ? `Tap a free time on up to ${max} lanes (same start time), then choose how long.`
+    : "Free times are shown in green. Log in to book.";
+  sheetFrame(`${week.area.name}: ${longDate.format(noon(day.date))}`, [
+    el("p", { className: "help" }, [
+      intro,
+      " ",
+      el("a", { href: "/banquets", text: "The whole alley for a party? Ask the club." }),
+    ]),
+    canBook() ? null : el("p", {}, [el("a", { className: "button", href: `/login?next=${location.pathname}`, text: "Log in to book" })]),
+    note,
+    el("div", { className: "lane-scroll", tabindex: "0", "aria-label": "Lanes. Scroll sideways for more lanes." }, [grid]),
+    bar,
+  ]);
+  sheet.classList.add("sheet-wide");
+  if (!sheet.open) sheet.showModal();
+  // Show the tapped hour.
+  const target = grid.querySelector(`[aria-label$="${CSS.escape(time(at(focus)))}, free"]`) ?? null;
+  const scroller = sheet.querySelector(".lane-scroll");
+  if (scroller instanceof HTMLElement) {
+    const rowHeight = scroller.scrollHeight / (rows + 1);
+    scroller.scrollTop = Math.max(0, (focus - 1) * rowHeight);
+  }
+  if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+}
+
+/** "45 minutes", "1 hour", "1 h 30 min". @param {number} n slots */
+function lengthText(n) {
+  const minutes = n * 15;
+  if (minutes < 60) return `${minutes} minutes`;
+  if (minutes % 60 === 0) return `${minutes / 60} hour${minutes === 60 ? "" : "s"}`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
+/**
+ * The last step for any booking: what, when, the cancel rule, the rules, I agree, Book.
+ * @param {string} title @param {string} when @param {number} startsAt
+ * @param {Record<string, unknown>} body what to send to /api/bookings (without agree)
+ * @param {(() => void) | null} back
+ */
+function bookingStep(title, when, startsAt, body, back) {
+  const deadline = startsAt - CUTOFF;
+  const agree = /** @type {HTMLInputElement} */ (el("input", { type: "checkbox", id: "sheet-agree" }));
+  const error = el("p", { className: "message", role: "alert", tabindex: "-1", hidden: true });
+  const book = /** @type {HTMLButtonElement} */ (el("button", { type: "submit", className: "button button-wide", text: "Book" }));
+  const form = el("form", { novalidate: true }, [
+    el("p", { className: "summary", text: when }),
+    el("p", { className: "message message-info" }, [
+      deadline > Date.now() / 1000
+        ? `You can cancel until ${formatDate(deadline)}, ${formatTime(deadline)} (${CLUB.phrases.cancel_cutoff} before it starts). After that, it can't be cancelled.`
+        : `This starts within ${CLUB.phrases.cancel_cutoff}, so it can't be cancelled once you book it.`,
+    ]),
+    el("h3", { text: "Booking rules" }),
+    el("ul", { className: "rules" }, CLUB.rules.map((rule) => el("li", { text: rule }))),
+    el("div", { className: "agree" }, [agree, el("label", { for: "sheet-agree", text: "I agree to the booking rules" })]),
+    error,
+    book,
+    back ? el("button", { type: "button", className: "button button-wide button-secondary", text: "Back", onclick: back }) : null,
+  ]);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!agree.checked) {
+      say(error, "Please tick \u201cI agree to the booking rules\u201d to book.");
+      error.focus();
+      return;
+    }
+    book.disabled = true;
+    try {
+      const { booking } = await api("/api/bookings", { method: "POST", body: { ...body, agree: true } });
+      showBooked(booking);
+    } catch (err) {
+      book.disabled = false;
+      say(error, err instanceof ApiError ? err.message : "Couldn't book. Please try again.");
+      error.focus();
+    }
+  });
+  sheetFrame(title, [form]);
+  agree.focus();
+}
+
 /** @param {Week} week */
 function rangeLabel(week) {
   const first = shortParts(week.days[0]?.date ?? week.from);
@@ -235,7 +497,7 @@ function render() {
 
   /** @type {HTMLElement | null} */
   let picker = null;
-  if (week.resources.length > 1) {
+  if (week.resources.length > 1 && !week.area.lanes) {
     const select = /** @type {HTMLSelectElement} */ (el("select", { id: "resource-pick" }));
     const anyLabel = week.area.any_label ?? `Any ${week.area.name.toLowerCase()}`;
     select.append(el("option", { value: "any", text: week.area.any_label ? anyLabel : `All ${week.area.name.toLowerCase()}` }));
@@ -270,7 +532,9 @@ function render() {
   ]);
 
   const legend = el("ul", { className: "legend", "aria-label": "Key" }, [
-    el("li", {}, [el("span", { className: "swatch swatch-free" }), canBook() ? "Free: tap to book" : "Free"]),
+    week.area.lanes
+      ? el("li", {}, [el("span", { className: "swatch swatch-free" }), "Lanes free (darker: fuller). Tap for the lanes"])
+      : el("li", {}, [el("span", { className: "swatch swatch-free" }), canBook() ? "Free: tap to book" : "Free"]),
     el("li", {}, [el("span", { className: "swatch swatch-taken" }), "Taken"]),
     el("li", {}, [el("span", { className: "swatch swatch-program" }), "Program"]),
     el("li", {}, [el("span", { className: "swatch swatch-closed" }), "Closed"]),
@@ -290,7 +554,11 @@ function render() {
   for (let r = 0; r < rows; r += 4) times.append(el("span", { text: hourLabel(startMinutes + r * 15) }));
 
   const colors = programColors(week.programs);
-  const days = el("div", { className: "week-days" }, week.days.map((d, i) => dayColumn(week, d, i, colors)));
+  const days = el(
+    "div",
+    { className: "week-days" },
+    week.days.map((d, i) => (week.area.lanes ? laneDayColumn(week, d, i, colors) : dayColumn(week, d, i, colors))),
+  );
   const grid = el("div", { className: "week-grid" }, [times, days]);
   grid.style.setProperty("--rows", String(rows));
 
@@ -355,6 +623,7 @@ function closeSheet() {
 }
 sheet.addEventListener("close", () => {
   sheet.replaceChildren();
+  sheet.classList.remove("sheet-wide");
   load();
 });
 // A tap on the dimmed background closes the sheet too.
