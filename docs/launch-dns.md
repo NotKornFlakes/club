@@ -1,10 +1,18 @@
-# Launch: moving pastimeathleticclub.org's DNS to Cloudflare
+# Launch: moving the DNS to Cloudflare, then the whole domain to the new site
 
 Status: **plan only. Nothing here has been done.** No DNS, nameserver or registrar changes
 happen until the owner says go.
 
-Goal: the booking site goes live at `book.pastimeathleticclub.org`. The Weebly website and
-the club's email keep working the whole time.
+Goal, in two stages:
+
+1. First, move the domain's DNS to Cloudflare without changing anything anyone can see. The
+   Weebly site and the club's email keep working (steps 0–5).
+2. Then, once the club approves the new site, launch it on the whole domain,
+   `pastimeathleticclub.org` and `www` (step 6). After that, retire Weebly, the Blogger blog
+   and the Google Calendar (step 7).
+
+The club's email keeps working throughout. Scope changed 2026-11-28 from a `book.`
+subdomain to the whole domain (`docs/full-site-plan.md`).
 
 ## 1. Why the DNS has to move
 
@@ -12,34 +20,36 @@ DNS is the internet's address book for the domain. It says where the website liv
 (Weebly), where email goes, and so on. Some company runs that address book for the club
 today (step 0 confirms which one).
 
-To put the booking site on `book.pastimeathleticclub.org`, Cloudflare must run the whole
-address book:
+To put the new site on `pastimeathleticclub.org`, Cloudflare must run the whole address
+book:
 
 - A Workers custom domain needs "an active Cloudflare zone", meaning the domain is set up
   in Cloudflare.
-- Cloudflare can run just one name (`book`) while another company runs the rest, but only on
+- Cloudflare can run just some names while another company runs the rest, but only on
   paid plans: CNAME ("partial") setup needs Business or Enterprise, and subdomain setup
   needs Enterprise.
 - So we use **full setup**: the domain's nameservers point to Cloudflare, and Cloudflare
   answers for every name in the domain. The zone itself can be on the Free plan.
 
 Moving the address book does **not** move the website or the email. Weebly keeps hosting
-the site, and the email provider keeps handling mail. We copy every existing entry exactly,
-so the copies point to the same places they do now. The only new entry is `book`.
+the site until launch, and the email provider keeps handling mail. We copy every existing
+entry exactly, so the copies point to the same places they do now. Nothing new is added
+until launch.
 
 ### Who owns what after the move
 
 | Owner | What | Edited where |
 |---|---|---|
 | **The club** | The zone, and every record that exists today (website, email, any catch-all, anything else). Zone settings and DNSSEC. Any record added later. | Cloudflare dashboard, by the owner |
-| **This project** | The `book` custom domain. CAA records too, but only if they're ever needed (step 6). | Terraform PRs in this repo |
+| **This project** | From launch: the custom domains for the bare domain and `www`. CAA records too, but only if they're ever needed (step 6). The email sending subdomain's records are added by Cloudflare when the owner onboards it. | Terraform PRs in this repo; the sending subdomain in the dashboard |
 
 - Terraform never creates, imports or changes the zone or the club's records. It only
   refers to the zone (by its ID or name, which aren't secret).
 - **Who edits the club's DNS:** the owner, as a small task when one comes up. The club
   doesn't get its own DNS accounts. Changes are rare.
-- **Two rules when editing the club's DNS:** leave `book` alone, and don't add CAA records
-  without checking step 6 first.
+- **Two rules when editing the club's DNS after launch:** leave the site's own names alone
+  (the bare domain, `www` and the sending subdomain), and don't add CAA records without
+  checking step 6 first.
 
 ### How the drift check stays out of the club's records
 
@@ -51,36 +61,38 @@ To keep it that way, the custom-domain PR adds a CI check that fails if `infra/`
 
 - declares a `cloudflare_zone` resource, or any zone-wide resource (zone settings, DNSSEC,
   rules), since those belong to the club;
-- declares a `cloudflare_dns_record` that isn't a CAA record, since the `book` record comes
-  with the custom domain and needs no record of its own;
+- declares a `cloudflare_dns_record` that isn't a CAA record, since the site's records come
+  with the custom domains and need no records of their own;
 - uses any Cloudflare resource type outside a short allowed list.
 
 Nobody runs `terraform import` on the club's records.
 
-What the drift check still watches: the `book` custom domain, any CAA records Terraform
-owns, and everything it watches today. One gap: the DNS record for `book` is made by
-Cloudflare, not by a Terraform resource, so the drift check may not notice if someone
-deletes it in the dashboard. The site going down would show it. That's why `book` is left
-alone when editing the club's DNS.
+What the drift check still watches: the custom domains, any CAA records Terraform owns,
+and everything it watches today. One gap: the DNS records for the custom domains are made by
+Cloudflare, not by Terraform resources, so the drift check may not notice if someone deletes
+one in the dashboard. The site going down would show it. That's why the site's names are
+left alone when editing the club's DNS.
 
 ### What stays the same, and what changes
 
 | Stays the same | Changes |
 |---|---|
-| Weebly hosts the public site | The domain's nameservers point to Cloudflare |
+| Weebly hosts the public site until launch | The domain's nameservers point to Cloudflare |
 | The email provider and mailboxes | DNS changes are made in the Cloudflare dashboard (by the owner) instead of at the old DNS host |
-| Where the domain is registered and renewed | New name: `book.pastimeathleticclub.org`, owned by this project |
+| Where the domain is registered and renewed | At launch: the bare domain and `www` point to the new site, and Weebly, Blogger and the Google Calendar are retired afterwards |
 
 ### Who does what
 
-- **Claude:** writes the Terraform PR for `book` and the CI check. Never logs in to the
+- **Claude:** writes the launch PR (custom domains, redirects) and the CI check. Never logs in to the
   registrar or the Cloudflare dashboard. Never changes nameservers, DNSSEC, DNS records, or
   GitHub settings, variables or secrets.
 - **Owner:** the registrar (DNSSEC, nameservers), setting up the zone and copying the records
-  in the Cloudflare dashboard, any later DNS change, API token permissions, the
-  `SITE_HOSTNAME` GitHub variable, reviewing and merging PRs, and approving deploys.
-- **Club:** answers the questions in step 0. Whoever edits the Weebly site adds the menu
-  link (step 7).
+  in the Cloudflare dashboard, onboarding the email sending subdomain, the cutover (removing
+  the Weebly records), any later DNS change, API token permissions, the `SITE_HOSTNAME`
+  GitHub variable, reviewing and merging PRs, and approving deploys.
+- **Club:** answers the questions in step 0 and in `docs/full-site-plan.md` (section 10),
+  approves the new site before launch, and agrees when the old services are retired
+  (step 7).
 
 ## 2. The steps
 
@@ -88,11 +100,10 @@ alone when editing the club's DNS.
 
 1. **Registrar.** Where is the domain registered? Who has the login? It should be a club
    account with MFA on, with the login kept in the shared Proton Pass vault (emergency
-   access). Anyone with that login can take over the website, the email and the booking
-   site.
+   access). Anyone with that login can take over the website, the email and the booking.
 2. **Renewal. The domain expires on 2027-01-11.** The club must confirm that auto-renew is on
    at the registrar and that the card on file is current. Do this first. If the domain
-   lapses, the website, the email and the booking site all stop working.
+   lapses, the website, the email and the booking all stop working.
 3. **Can the nameservers be changed there?** If the registrar won't allow it, stop here and
    decide with the club. Moving the registration elsewhere is a separate project.
 4. **Current DNS host.** This is often the registrar. It could also be Weebly or another
@@ -139,7 +150,7 @@ alone when editing the club's DNS.
   dig +short TXT $D
   dig +short TXT _dmarc.$D
   dig +short CAA $D
-  dig +short CNAME book.$D   # must be empty: no custom domain on a CNAME
+  # www: if the CNAME line above gave an answer, that record must go before launch (no custom domain on a CNAME)
   # DKIM: dig +short TXT <selector>._domainkey.$D   (and CNAME, if the provider uses that)
   ```
 
@@ -200,22 +211,40 @@ gives an answer, compare it, and the other step 1 lines, with the "before" pictu
 the old nameservers back at the registrar. That works because the old DNS host was left
 untouched. The same delay of up to 24 hours applies.
 
-### Step 6: add `book.pastimeathleticclub.org` (the "custom domain" build PR)
+### Step 6: launch on the whole domain (only once the club approves the new site)
 
-- Terraform PR: `cloudflare_workers_custom_domain` with `hostname =
-  "book.pastimeathleticclub.org"`, the Worker as `service`, and the zone's ID or name.
-  Cloudflare then creates the DNS record and the certificate itself. Plus the CI check from
-  "How the drift check stays out of the club's records".
-- **If `book` is covered by a catch-all today:** the record Cloudflare creates for `book`
-  takes over that name. Cloudflare: "A wildcard record applies only when no exact record
-  exists at the queried name." All other names keep using the catch-all. The custom domains
-  page doesn't say anything about adding a custom domain where only a catch-all answers. If
-  it refuses, the owner adds a placeholder record for `book` first.
-- **`book` must have no CNAME record.** Cloudflare can't add a custom domain there. Step 1's
-  last `dig` line checks this.
+Before starting:
+
+- The club has approved the finished site (`docs/full-site-plan.md`, section 10).
+- The list of old Weebly page addresses is in, and each one redirects to its new page.
+- The banquet form's email has been tested from the workers.dev address (below).
+
+**The email sending subdomain** (owner, in the dashboard, before the cutover):
+
+- Onboard a sending subdomain such as `forms.pastimeathleticclub.org` for Cloudflare Email
+  Sending. Cloudflare adds that subdomain's own MX, SPF, DKIM and DMARC records. The bare
+  domain's Google MX records stay as they are.
+- **Never onboard the bare domain itself.** That would add MX records at the bare domain
+  and break the club's Google email.
+- Add the club inbox that receives inquiries as a verified destination address.
+
+**The Terraform PR:**
+
+- `cloudflare_workers_custom_domain` for `pastimeathleticclub.org` and for
+  `www.pastimeathleticclub.org`, with the Worker as `service`. Cloudflare then creates the
+  DNS records and the certificates itself.
+- The Worker redirects `www` to the bare domain.
+- The PR also adds the CI check from "How the drift check stays out of the club's records".
+- **Records already on those names:** today they point to Weebly.
+  - Cloudflare's custom domains page only says a custom domain can't go on a name with a
+    CNAME record. It doesn't say what happens with an A record already there. The PR finds
+    out on the workers.dev setup first.
+  - The plan assumes the owner deletes the Weebly records for the bare domain and `www`
+    just before the apply.
+  - That means a few minutes without a site, so do it at a quiet time.
 - **CAA records**, only if the zone has any:
-  - The custom domain's certificate is an "Advanced Certificate". Cloudflare adds its own CAA
-    entries automatically only for Universal SSL, not for these.
+  - Each custom domain's certificate is an "Advanced Certificate". Cloudflare adds its own
+    CAA entries automatically only for Universal SSL, not for these.
   - If the zone has CAA records, they must allow a certificate authority Cloudflare uses for
     Advanced Certificates: `letsencrypt.org`, `pki.goog; cansignhttpexchanges=yes` or
     `ssl.com`.
@@ -226,27 +255,51 @@ untouched. The same delay of up to 24 hours applies.
   Terraform-owned CAA records would need Zone DNS Edit, limited to this one zone. Cloudflare's
   docs show tokens limited to one zone, but not to particular records. A token like that could
   edit any record in the zone, so it's added only if CAA records are really needed.
-- **In the same PR, and by the owner at the same time:**
-  - The owner changes the GitHub variable `SITE_HOSTNAME` to `book.pastimeathleticclub.org`.
-    The Turnstile widget (the alarm-mode challenge) works only on that one hostname, and the
-    deploy's smoke test uses it. (The per-club config PR may already have moved this
-    setting into the club's config file.)
-  - The booking site's pages link back to `pastimeathleticclub.org`.
-- **After deploying:** log in, book, cancel, check the security headers, and check the alarm
-  page on the new address.
-- **Then** turn off the workers.dev address in Terraform, so there's only one way in. Anyone
-  logged in on the workers.dev address logs in again: cookies belong to one address.
+- **In the same PR, and by the owner at the same time:** the owner changes the GitHub
+  variable `SITE_HOSTNAME` to `pastimeathleticclub.org`. The Turnstile widget (the
+  alarm-mode challenge and the inquiry form) works only on that one hostname, and the
+  deploy's smoke test uses it. That PR may move this setting into the club's settings file.
 
-### Step 7: the Weebly menu link
+**After deploying, check:**
 
-Once step 6 passes, whoever edits the Weebly site adds a menu item **Member Booking** that
-links to `https://book.pastimeathleticclub.org`.
+- every public page, What's On, and a test inquiry, which arrives in the club inbox;
+- member login, booking and cancelling;
+- the admin and editor pages, the security headers, and the alarm page;
+- a few old Weebly addresses, which redirect.
+
+**Then:**
+
+- Turn off the workers.dev address in Terraform, so there's only one way in. Anyone logged
+  in on the workers.dev address logs in again, because cookies belong to one address.
+- **Rollback,** while step 7 hasn't happened: the owner removes the custom domains and puts
+  the Weebly records back from the step 1 list. Weebly is still paid for and running until
+  then.
+
+### Step 7: retire the old services (after a settling period agreed with the club)
+
+Wait a few weeks after step 6, with the club's OK. Then:
+
+- **Weebly:** cancel the club's plan. The domain stays registered at the registrar, which
+  is separate. In the dashboard, delete the catch-all record that pointed to Weebly, and
+  any other Weebly records.
+- **Blogger:**
+  - Posts worth keeping move into the History page (or a news page) first.
+  - If the blog sits on a club subdomain, that subdomain redirects to the new site.
+  - Otherwise, a last post points readers to the new site.
+  - Whether the blog is then deleted or kept private is the club's call.
+- **Google Calendar:**
+  - Its upcoming events are already in What's On.
+  - Anyone who subscribed is told about the new calendar, or feed if there is one.
+  - Then the calendar is deleted, or kept with a note that it has moved.
+  - Old pages that embedded it are gone with Weebly.
+- The club's Google email stays as it is.
 
 ### Step 8 (optional, after launch): email authentication for the club's Google email
 
-These records help receiving mail servers tell real club email from fakes. The booking site
-doesn't need them, since it sends no email. They're the club's records, so the owner adds
-them in the Cloudflare dashboard, not Terraform.
+These records help receiving mail servers tell real club email from fakes. They're for the
+club's own Google email on the bare domain. The site's inquiry email has its own records on
+the sending subdomain (step 6). They're the club's records, so the owner adds them in the
+Cloudflare dashboard, not Terraform.
 
 Do this only after step 5 has passed, in the order below. After each record, send a test
 email from a club address **to an address outside the club** and read its
@@ -306,4 +359,5 @@ passes.
 | DKIM steps in Google Admin; 2048/1024-bit; the `google` prefix; Start authentication; no self-test | knowledge.workspace.google.com/admin/security/set-up-dkim (was support.google.com/a/answer/174124) |
 | DMARC: start at `p=none`; `rua=` to a dedicated mailbox; wait 48 hours after SPF/DKIM | knowledge.workspace.google.com/admin/security/set-up-dmarc (was support.google.com/a/answer/2466580) |
 | API tokens can be limited to one zone | developers.cloudflare.com/fundamentals/api/get-started/create-token/ |
+| Email Sending: a subdomain is its own sending domain with its own MX, SPF, DKIM and DMARC; onboarding the root domain adds MX at the root; needs Cloudflare DNS | developers.cloudflare.com/email-service/configuration/subdomains/, developers.cloudflare.com/email-service/get-started/route-emails/ |
 | `cloudflare_workers_custom_domain` (`hostname`, `service`, `zone_id`/`zone_name`; Workers Scripts permissions); `cloudflare_dns_record` | github.com/cloudflare/terraform-provider-cloudflare, `docs/resources/`, v5.29.0 |
