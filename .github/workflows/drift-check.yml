@@ -33,6 +33,8 @@ jobs:
       # and deploys all use the same ones). Terraform marks them sensitive in its output.
       TF_VAR_throttle_settings: ${{ secrets.THROTTLE_SETTINGS }}
       TF_VAR_login_flood_limit: ${{ secrets.LOGIN_FLOOD_LIMIT }}
+      # The site's hostname (not secret), for the Turnstile widget
+      TF_VAR_site_hostname: ${{ vars.SITE_HOSTNAME }}
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
     steps:

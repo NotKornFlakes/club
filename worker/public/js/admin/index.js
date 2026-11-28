@@ -48,8 +48,22 @@ async function reset(id, username) {
   }
 }
 
+/** @param {boolean} on */
+async function setAlarm(on) {
+  if (on && !window.confirm("Turn the login alarm on? Every login will need the Turnstile check and be slowed for a while.")) return;
+  try {
+    await api("/api/admin/alarm", { method: "POST", body: { on } });
+    location.reload();
+  } catch (error) {
+    showError(error);
+  }
+}
+byId("alarm-on").addEventListener("click", () => setAlarm(true));
+byId("alarm-off").addEventListener("click", () => setAlarm(false));
+
 try {
   const admin = await start();
+  byId(admin.alarm.on ? "alarm-on" : "alarm-off").hidden = true;
   byId("username").textContent = admin.username;
   byId("alarm-status").textContent = admin.alarm.on
     ? `ON until ${formatTime(admin.alarm.until)}. Failed logins have spiked, so every login is slowed and needs the Turnstile check. It switches off by itself.`
@@ -57,7 +71,7 @@ try {
   byId("alarm-status").className = admin.alarm.on ? "message message-error" : "message message-ok";
   byId("failures").textContent = `Failed logins: ${admin.failed_logins.last_hour} in the last hour, ${admin.failed_logins.last_day} in the last 24 hours.`;
   const history = admin.alarm_history.map((/** @type {{ at: number, window: string }} */ h) =>
-    el("li", { text: `${when(h.at)} (${h.window === "short" ? "a burst of failures" : "many failures over a day"})` }),
+    el("li", { text: `${when(h.at)} (${h.window === "short" ? "a burst of failures" : h.window === "long" ? "many failures over a day" : "turned on by an admin"})` }),
   );
   byId("alarm-history").replaceChildren(...(history.length ? history : [el("li", { text: "None." })]));
   await loadAdmins();

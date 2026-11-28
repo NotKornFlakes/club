@@ -1,6 +1,6 @@
 # Architecture and D1 schema
 
-Status: **approved 2026-11-26, with changes (folded in below).** Nothing here is built yet.
+Status: **approved 2026-11-26, with changes (folded in below).** Built in the PRs listed in section 12.
 `CLAUDE.md` holds the requirements; this document says how we'll meet them. Choices the
 brief didn't settle are marked **(my call)**. Ones settled at approval are marked
 **(decided)**.
@@ -700,8 +700,11 @@ The README will say so.
 - **Infra PR:** exact API token permissions, taken from each resource's "Accepted
   Permissions" in the provider docs. Find out what Workers Logs records, and log nothing
   personal (no PINs, tokens or member numbers).
-- **Infra PR:** whether the Turnstile secret goes through Terraform (it would then sit in
-  state; low risk) or is set with wrangler like `PEPPER`.
+- **Infra PR → decided in the hardening PR:** Terraform creates the Turnstile widget and
+  passes its public site key; the **secret is set with wrangler like `PEPPER`** (README step 3),
+  because a Terraform-managed secret binding can't be read back and risks a change on every
+  plan. The widget's secret does also sit in Terraform state (it's a computed attribute);
+  the state is private.
 - **Infra PR (done):** the state bucket's `r2.dev` setting is managed by Terraform
   (`cloudflare_r2_managed_domain`, `enabled = false`). Token permission: Workers R2 Storage,
   Edit to deploy and Read to plan.
@@ -711,10 +714,16 @@ The README will say so.
   Tests cover each trigger, including the `INSERT OR REPLACE` guard and two bookings racing.
   (Already pre-checked: this schema passed 35 behaviour checks on plain SQLite 3.51. D1 is
   built on SQLite but runs its own version, so it still needs its own test.)
-- **Member auth PR:** measure PBKDF2's CPU time per login, which confirms the Paid plan
-  need. Raise `cpu_ms` only if needed.
-- **Hardening PR:** Turnstile works on a `workers.dev` hostname, and the exact CSP entries it
-  needs (developers.cloudflare.com/turnstile/).
+- **Member auth PR (done):** PBKDF2 at 100,000 rounds costs about 10 ms of CPU per PIN check
+  (measured in Node, same algorithm). That's the whole Free-plan budget, so the Paid plan is
+  needed. The default 30 s CPU limit is far more than enough; `cpu_ms` stays unset.
+- **Hardening PR (done):** CSP entries per developers.cloudflare.com/turnstile/reference/content-security-policy/:
+  `script-src` and `frame-src` `https://challenges.cloudflare.com`, nothing else. Widget
+  hostnames take no wildcards (adding a hostname also covers its subdomains), so Terraform
+  gets the exact `SITE_HOSTNAME`. The docs don't mention `workers.dev` either way: **check the
+  widget on the live workers.dev address before launch** (Dashboard → **Turn alarm on now**,
+  then open the login page). Tokens are at most 2048 characters and single-use. Local dev uses Cloudflare's
+  documented always-pass test keys.
 
 ## 10. CI/CD (GitHub Actions)
 

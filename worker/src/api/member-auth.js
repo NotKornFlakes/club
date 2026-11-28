@@ -21,7 +21,7 @@ async function login(ctx) {
   onlyFields(body, ["member_number", "pin", "turnstile_token"]);
   const memberNumber = str(body, "member_number", { max: 20, label: "your member number" });
   const pin = str(body, "pin", { max: 6, label: "your PIN", trim: false });
-  const turnstileToken = optionalStr(body, "turnstile_token", { max: 4096 });
+  const turnstileToken = optionalStr(body, "turnstile_token", { max: 2048 });
 
   // Settings and keys first: if any is missing, refuse rather than guess.
   const settings = throttleSettings(env.THROTTLE_SETTINGS);

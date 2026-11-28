@@ -4,10 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard – Admin – [Club name]</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/js/admin/index.js"></script>
 </head>
 <body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
   <header class="topbar">
     <nav aria-label="Admin">
       <a href="/admin/" aria-current="page">Dashboard</a>
@@ -21,13 +23,19 @@
     </nav>
   </header>
   <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
-  <main>
+  <main id="main">
     <h1>Admin</h1>
     <p class="lead">Logged in as <strong id="username">…</strong>.</p>
     <section aria-labelledby="alarm-title">
       <h2 id="alarm-title">Login alarm</h2>
       <p id="alarm-status">…</p>
       <p id="failures" class="help"></p>
+      <div class="actions">
+        <button type="button" class="button button-secondary" id="alarm-on">Turn alarm on now</button>
+        <button type="button" class="button button-secondary" id="alarm-off">Turn alarm off</button>
+      </div>
+      <p class="help">Turning it on makes every login show the Turnstile check for a while (useful
+        to test Turnstile, or if you see an attack starting). It switches off by itself.</p>
       <h3>Recent alarms</h3>
       <ul id="alarm-history"></ul>
     </section>
