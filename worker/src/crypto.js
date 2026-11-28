@@ -2,11 +2,35 @@
 // Cryptography helpers, built only on Web Crypto (crypto.subtle), which both the
 // Workers runtime and Node have. Design: docs/architecture.md, section 5.
 
+import { isDemo } from "./demo.js";
+
 const encoder = new TextEncoder();
 
 /** The Workers runtime's hard cap for PBKDF2 (github.com/cloudflare/workerd, limit-enforcer.h). */
 export const PBKDF2_ITERATIONS = 100_000;
+
+/**
+ * Demo sites only (DEMO_MODE "on", made-up members): light enough for the Workers Free
+ * plan's 10 ms of CPU per request, even for 25 new PINs at once. Never for real members.
+ */
+export const DEMO_PBKDF2_ITERATIONS = 1_000;
 const SALT_BYTES = 16;
+
+/**
+ * The rounds for this site: full strength unless DEMO_MODE is exactly "on". Checks accept
+ * only hashes made with this same count, so a demo's hashes never work on a full-strength
+ * site, and the other way round.
+ * @param {{ DEMO_MODE?: unknown }} env
+ * @returns {number}
+ */
+export function hashRounds(env) {
+  return isDemo(env) ? DEMO_PBKDF2_ITERATIONS : PBKDF2_ITERATIONS;
+}
+
+/** @param {number} rounds */
+function checkRounds(rounds) {
+  if (rounds !== PBKDF2_ITERATIONS && rounds !== DEMO_PBKDF2_ITERATIONS) throw new RangeError("unexpected hash rounds");
+}
 
 /** PEPPER and IP_HASH_KEY must be at least this long (README: `openssl rand -base64 32`). */
 export const MIN_SECRET_KEY_LENGTH = 32;
@@ -139,42 +163,49 @@ async function pepperedPbkdf2(pinKey, secret, salt, iterations) {
 
 /**
  * Hashes a PIN or admin password for storage.
- * @param {string} secret @param {PepperKeys} keys
- * @returns {Promise<string>} `pbkdf2-sha256$100000$<salt>$<hash>`
+ * @param {string} secret @param {PepperKeys} keys @param {number} rounds from hashRounds(env)
+ * @returns {Promise<string>} `pbkdf2-sha256$<rounds>$<salt>$<hash>`
  */
-export async function hashSecret(secret, keys) {
+export async function hashSecret(secret, keys, rounds) {
+  checkRounds(rounds);
   const salt = randomBytes(SALT_BYTES);
-  const hash = await pepperedPbkdf2(keys.pinKey, secret, salt, PBKDF2_ITERATIONS);
-  return `pbkdf2-sha256$${PBKDF2_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
+  const hash = await pepperedPbkdf2(keys.pinKey, secret, salt, rounds);
+  return `pbkdf2-sha256$${rounds}$${toBase64(salt)}$${toBase64(hash)}`;
 }
 
 /**
- * Checks a PIN or password against a stored hash, in constant time.
- * @param {string} secret @param {string} stored @param {PepperKeys} keys
+ * Checks a PIN or password against a stored hash, in constant time. A hash made with a
+ * different number of rounds, or not readable, never matches. It's still hashed the same
+ * way, so the answer always takes as long.
+ * @param {string} secret @param {string} stored @param {PepperKeys} keys @param {number} rounds from hashRounds(env)
  */
-export async function verifySecret(secret, stored, keys) {
+export async function verifySecret(secret, stored, keys, rounds) {
+  checkRounds(rounds);
   const parts = stored.split("$");
-  if (parts.length !== 4 || parts[0] !== "pbkdf2-sha256") return false;
-  const iterations = Number(parts[1]);
-  if (!Number.isInteger(iterations) || iterations < 1 || iterations > PBKDF2_ITERATIONS) return false;
-  let salt;
-  let expected;
-  try {
-    salt = fromBase64(parts[2] ?? "");
-    expected = fromBase64(parts[3] ?? "");
-  } catch {
-    return false;
+  let usable = parts.length === 4 && parts[0] === "pbkdf2-sha256" && parts[1] === String(rounds);
+  /** @type {Uint8Array<ArrayBuffer>} */
+  let salt = new Uint8Array(SALT_BYTES);
+  /** @type {Uint8Array<ArrayBuffer>} */
+  let expected = new Uint8Array(32);
+  if (usable) {
+    try {
+      salt = fromBase64(parts[2] ?? "");
+      expected = fromBase64(parts[3] ?? "");
+    } catch {
+      usable = false;
+    }
   }
-  const actual = await pepperedPbkdf2(keys.pinKey, secret, salt, iterations);
-  return bytesEqual(actual, expected);
+  const actual = await pepperedPbkdf2(keys.pinKey, secret, salt, rounds);
+  return bytesEqual(actual, expected) && usable;
 }
 
-/** Never matches anything. Checked for unknown member numbers, so timing gives nothing away. */
-const DUMMY_HASH = `pbkdf2-sha256$${PBKDF2_ITERATIONS}$${toBase64(new Uint8Array(SALT_BYTES))}$${toBase64(new Uint8Array(32))}`;
-
-/** Spends the same time as a real check, then returns false. @param {string} secret @param {PepperKeys} keys */
-export async function verifyDummy(secret, keys) {
-  await verifySecret(secret, DUMMY_HASH, keys);
+/**
+ * Spends the same time as a real check, then returns false. Used for unknown member
+ * numbers and usernames, so timing gives nothing away.
+ * @param {string} secret @param {PepperKeys} keys @param {number} rounds from hashRounds(env)
+ */
+export async function verifyDummy(secret, keys, rounds) {
+  await verifySecret(secret, "", keys, rounds);
   return false;
 }
 

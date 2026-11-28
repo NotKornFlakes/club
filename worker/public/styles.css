@@ -1639,3 +1639,14 @@ td {
 .skip-link:focus {
   top: 0.5rem;
 }
+
+/* ---------- Demo sites only: the banner at the top of every page ---------- */
+
+.demo-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--program-gold);
+  color: var(--program-text);
+  font-weight: 600;
+  text-align: center;
+}

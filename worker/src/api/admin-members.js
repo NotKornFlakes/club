@@ -4,7 +4,7 @@
 // New PINs are returned once, never stored in plain text, and never logged.
 
 import { auditEntry } from "../audit.js";
-import { hashSecret, newPin, pepperKeys } from "../crypto.js";
+import { hashRounds, hashSecret, newPin, pepperKeys } from "../crypto.js";
 import {
   activeSuspension,
   defaultSuspensionUntil,
@@ -150,7 +150,7 @@ async function createMembers(ctx, wanted) {
     statements.push(
       env.DB.prepare(
         "INSERT INTO members (member_number, display_name, pin_hash, pin_issued_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-      ).bind(number, name, await hashSecret(pin, keys), now, now, now),
+      ).bind(number, name, await hashSecret(pin, keys, hashRounds(env)), now, now, now),
     );
     created.push({ member_number: number, display_name: name, pin });
   }
@@ -246,7 +246,7 @@ async function resetPin(ctx) {
   onlyFields(ctx.body, []);
   const member = await memberRow(ctx, idParam(ctx.params[0]));
   const pin = newPin();
-  const hash = await hashSecret(pin, await pepperKeys(ctx.env.PEPPER));
+  const hash = await hashSecret(pin, await pepperKeys(ctx.env.PEPPER), hashRounds(ctx.env));
   await ctx.env.DB.batch([
     ctx.env.DB.prepare(
       `UPDATE members SET pin_hash = ?, pin_issued_at = ?, failed_logins = 0, lock_level = 0, locked_until = NULL,

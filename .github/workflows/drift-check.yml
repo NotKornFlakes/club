@@ -35,6 +35,8 @@ jobs:
       TF_VAR_login_flood_limit: ${{ secrets.LOGIN_FLOOD_LIMIT }}
       # The site's hostname (not secret), for the Turnstile widget
       TF_VAR_site_hostname: ${{ vars.SITE_HOSTNAME }}
+      # "on" only for a demo site with made-up data (README, "Demo site")
+      TF_VAR_demo_mode: ${{ vars.DEMO_MODE == 'on' }}
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
     steps:

@@ -1,7 +1,7 @@
 // @ts-check
 // Member login (member number + 6-digit PIN), logout and "who am I".
 
-import { hashIp, pepperKeys, verifyDummy, verifySecret } from "../crypto.js";
+import { hashIp, hashRounds, pepperKeys, verifyDummy, verifySecret } from "../crypto.js";
 import { activeSuspension, memberNoShowDates, suspendedMessage } from "../discipline.js";
 import { HttpError, clientIp, json } from "../http.js";
 import { MEMBER_COOKIE, clearCookie, createMemberSession } from "../sessions.js";
@@ -40,7 +40,7 @@ async function login(ctx) {
 
   if (!member || member.status !== "active" || typeof member.pin_hash !== "string") {
     // Same work and the same answer as a wrong PIN, so nothing reveals which numbers exist.
-    await verifyDummy(pin, keys);
+    await verifyDummy(pin, keys, hashRounds(env));
     await recordFailure({ db: env.DB, kind: "member", ipHash, memberId: member ? Number(member.id) : null, settings, now });
     throw new HttpError(401, "wrong", WRONG);
   }
@@ -49,7 +49,7 @@ async function login(ctx) {
   const claim = await claimAttempt(env.DB, "member", memberId, now);
   if (!claim) throw lockedError((await lockedUntil(env.DB, "member", memberId)) ?? now);
 
-  if (!(await verifySecret(pin, member.pin_hash, keys))) {
+  if (!(await verifySecret(pin, member.pin_hash, keys, hashRounds(env)))) {
     await recordFailure({ db: env.DB, kind: "member", ipHash, memberId, settings, now });
     if (claim.lockedUntil) throw lockedError(claim.lockedUntil);
     throw new HttpError(401, "wrong", WRONG);

@@ -218,6 +218,9 @@ Before starting:
 - The club has approved the finished site (`docs/full-site-plan.md`, section 10).
 - The list of old Weebly page addresses is in, and each one redirects to its new page.
 - The banquet form's email has been tested from the workers.dev address (below).
+- The site isn't a demo: the `DEMO_MODE` variable is unset, and no page shows the demo
+  banner. The club's site runs in the club's own Cloudflare account with a new database.
+  Nothing is carried over from the demo.
 
 **The email sending subdomain** (owner, in the dashboard, before the cutover):
 

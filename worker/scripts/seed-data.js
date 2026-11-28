@@ -73,10 +73,10 @@ const TABLES = [
 
 /**
  * Every statement needed to reset the local database to the test data.
- * @param {{ pepper: string, now: number }} options now = Unix seconds
+ * @param {{ pepper: string, now: number, rounds: number }} options now = Unix seconds; rounds = hashRounds() of the local settings
  * @returns {Promise<Statement[]>}
  */
-export async function buildSeed({ pepper, now }) {
+export async function buildSeed({ pepper, now, rounds }) {
   const keys = await pepperKeys(pepper);
   const today = clubToday(now);
   /** @type {Statement[]} */
@@ -88,7 +88,7 @@ export async function buildSeed({ pepper, now }) {
     params: [
       SEED_ADMIN.id,
       SEED_ADMIN.username,
-      await hashSecret(SEED_ADMIN.password, keys),
+      await hashSecret(SEED_ADMIN.password, keys, rounds),
       await encryptText(SEED_ADMIN.totpSecret, keys),
       now,
       now,
@@ -99,7 +99,7 @@ export async function buildSeed({ pepper, now }) {
     out.push({
       sql: `INSERT INTO members (id, member_number, display_name, pin_hash, pin_issued_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      params: [member.id, member.number, member.name, await hashSecret(member.pin, keys), now, now, now],
+      params: [member.id, member.number, member.name, await hashSecret(member.pin, keys, rounds), now, now, now],
     });
   }
 

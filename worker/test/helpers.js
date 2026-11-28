@@ -2,7 +2,7 @@
 // Shared test helpers: make members and admins, log in, and call the API the way the
 // site's own pages do (same Origin, JSON body, session cookie, CSRF token).
 import { env, exports } from "cloudflare:workers";
-import { encryptText, hashSecret, pepperKeys } from "../src/crypto.js";
+import { encryptText, hashRounds, hashSecret, pepperKeys } from "../src/crypto.js";
 
 export const ORIGIN = "https://club.example.workers.dev";
 export const db = env.DB;
@@ -39,7 +39,7 @@ export async function makeMember(options = {}) {
       `INSERT INTO members (member_number, display_name, pin_hash, status, pin_issued_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(number, options.name ?? null, await hashSecret(pin, keys), options.status ?? "active", now, now, now)
+    .bind(number, options.name ?? null, await hashSecret(pin, keys, hashRounds(env)), options.status ?? "active", now, now, now)
     .run();
   return { id: result.meta.last_row_id, number, pin };
 }
@@ -59,7 +59,7 @@ export async function makeAdmin(options = {}) {
       `INSERT INTO admins (username, password_hash, totp_secret_enc, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
     )
-    .bind(username, await hashSecret(password, keys), await encryptText(totpSecret, keys), now, now)
+    .bind(username, await hashSecret(password, keys, hashRounds(env)), await encryptText(totpSecret, keys), now, now)
     .run();
   return { id: result.meta.last_row_id, username, password, totpSecret };
 }

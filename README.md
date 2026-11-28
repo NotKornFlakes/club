@@ -35,8 +35,9 @@ Done once, by the owner. Nothing here goes in the repo.
    two-factor login for both.
 2. **Workers & Pages:** open it once and pick the account's `workers.dev` subdomain. The site
    will be at `https://club-booking.<subdomain>.workers.dev`.
-3. **Workers Paid plan** ($5/month). Logins need more CPU time than the free plan allows.
-   The foundation works without it.
+3. **Workers Paid plan** ($5/month) for the club's real site. Logins need more CPU time
+   than the free plan allows. A demo with made-up data can stay on the free plan (see
+   "Demo site").
 4. **R2:** turn it on, then create a bucket named **`club-tfstate`** for Terraform state. In
    the bucket's **Settings**, check that **Public Development URL** is **Disabled** and that
    there are no **Custom Domains**. Terraform keeps the r2.dev address off from then on.
@@ -77,6 +78,8 @@ Done once, by the owner. Nothing here goes in the repo.
   malformed, the live site refuses logins ("Login is temporarily unavailable") rather than
   guessing. The values in `worker/.dev.vars.example` and `worker/wrangler.json` are made-up
   local ones; don't reuse them.
+- **Repository variable `DEMO_MODE`:** `on` only for a demo site with made-up data (see
+  "Demo site"). Leave it unset for the club's real site.
 - **Repository variable:** `SITE_HOSTNAME` = the site's hostname, without `https://`:
   `club-booking.<subdomain>.workers.dev` (the subdomain you picked in step 1). Terraform
   limits the Turnstile check to this hostname, and the deploy's smoke test checks
@@ -304,6 +307,50 @@ and you can log in, then turn it off.
 
 Never run `wrangler deploy`. Terraform owns the Worker.
 
+## Demo site (made-up data, Workers free plan)
+
+For showing the site before it goes into the club's own Cloudflare account. The setup steps
+above are the same, done in your own account. Then set the `DEMO_MODE` repository variable
+to `on`, and the site:
+
+- hashes PINs and admin passwords with 1,000 PBKDF2 rounds instead of 100,000, so a login
+  fits the free plan's 10 ms of CPU time;
+- says "Demo site with made-up members and bookings. It isn't the club's own website." at
+  the top of every page;
+- asks search engines not to list it.
+
+Rules:
+
+- **Made-up data only.** Never real member numbers or names: 1,000 rounds wouldn't protect
+  real PINs.
+- The deployed demo shows the placeholder page text and no photos, because the deploy only
+  sees what's in the repo. The club's own text and photos stay on your computer until the
+  club gives permission.
+- Each hash is tied to the setting. One made with demo mode on never works with it off, and
+  the other way round. If it's switched by mistake, every login fails until it's switched
+  back. The club's real site starts with a new database in the club's own account.
+
+Filling it with made-up data (in the admin pages, after "Secret keys" above):
+
+1. **First-time admin setup** (below), with your own strong password and authenticator.
+   The local test admin's password is in this public repo, so it's never used on a live site.
+2. **Courts & rooms → Add the starting list.**
+3. **Leagues:** add the programs (tick "Show on This Week") and a league or two, for example
+   a Friday league on every bowling lane.
+4. **Members → Add a member:** a few made-up numbers, such as 9001 to 9010. Print the PIN
+   sheet, then log in as them to make bookings.
+
+What the free plan allows (developers.cloudflare.com/workers/platform/limits/,
+developers.cloudflare.com/d1/platform/limits/ and developers.cloudflare.com/d1/platform/pricing/):
+
+- 100,000 requests a day.
+- 10 ms of CPU time per request, and for the nightly clean-up.
+- 50 database queries per request.
+- D1: 5 million rows read and 100,000 rows written a day, and 500 MB per database.
+
+A request that uses too much CPU gets Cloudflare's error 1102. To check, open **Workers &
+Pages → club-booking → Metrics** in the dashboard and look at CPU time.
+
 ## Run it locally
 
 You can try the whole site on your own computer. Nothing here talks to Cloudflare: the
@@ -398,6 +445,7 @@ noisy (see the table).
 | Bad dependency | No npm packages run in the live site; lockfile; Dependabot; actions pinned to commits; `npm audit` and dependency review in CI | Development tools in CI. |
 | GitHub or Cloudflare account takeover | Two-factor login on both; required reviewer on the `production` environment; tightly scoped API tokens; a separate Cloudflare account for the club | |
 | Members sharing PINs | The booking rules say not to | Can't be prevented technically. |
+| Demo mode left on for real members | It's on only when `DEMO_MODE` is exactly `on`; every page then says "Demo site"; demo hashes never work with it off, so a demo database can't be reused; the launch checklist (`docs/launch-dns.md`, step 6) | |
 
 Out of scope: Cloudflare itself being compromised, and malware on a member's phone.
 

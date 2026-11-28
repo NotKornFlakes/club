@@ -5,7 +5,7 @@
   "description": "The club booking site: one Cloudflare Worker serving pages and /api.",
   "scripts": {
     "content": "node scripts/club-content.mjs",
-    "types": "wrangler types --include-runtime",
+    "types": "wrangler types --include-runtime --strict-vars=false",
     "pretypecheck": "node scripts/club-content.mjs",
     "typecheck": "npm run types && tsc -p tsconfig.json && tsc -p test/tsconfig.json",
     "pretest": "node scripts/club-content.mjs",

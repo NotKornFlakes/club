@@ -2,7 +2,7 @@
 // The local seed data loads into the real schema, and its PINs and admin login work.
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { decryptText, pepperKeys, verifySecret } from "../src/crypto.js";
+import { PBKDF2_ITERATIONS, decryptText, pepperKeys, verifySecret } from "../src/crypto.js";
 import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_ALLEY_LEAGUE, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
 import seedScript from "../scripts/seed.mjs?raw";
 import { CLUB } from "../src/club.js";
@@ -13,7 +13,7 @@ const PEPPER = "test-pepper-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const NOW = Math.floor(Date.now() / 1000);
 
 beforeAll(async () => {
-  const statements = await buildSeed({ pepper: PEPPER, now: NOW });
+  const statements = await buildSeed({ pepper: PEPPER, now: NOW, rounds: PBKDF2_ITERATIONS });
   await db.batch(statements.map(({ sql, params }) => db.prepare(sql).bind(...params)));
 });
 
@@ -24,7 +24,7 @@ describe("local seed data", () => {
     expect(results).toHaveLength(5);
     for (const [i, member] of SEED_MEMBERS.entries()) {
       expect(results[i]?.member_number).toBe(member.number);
-      expect(await verifySecret(member.pin, String(results[i]?.pin_hash), keys)).toBe(true);
+      expect(await verifySecret(member.pin, String(results[i]?.pin_hash), keys, PBKDF2_ITERATIONS)).toBe(true);
     }
   });
 
@@ -32,7 +32,7 @@ describe("local seed data", () => {
     const keys = await pepperKeys(PEPPER);
     const admin = await db.prepare("SELECT * FROM admins").first();
     expect(admin?.username).toBe(SEED_ADMIN.username);
-    expect(await verifySecret(SEED_ADMIN.password, String(admin?.password_hash), keys)).toBe(true);
+    expect(await verifySecret(SEED_ADMIN.password, String(admin?.password_hash), keys, PBKDF2_ITERATIONS)).toBe(true);
     expect(SEED_ADMIN.password.length).toBeGreaterThanOrEqual(16);
     expect(await decryptText(String(admin?.totp_secret_enc), keys)).toBe(SEED_ADMIN.totpSecret);
   });
@@ -40,7 +40,7 @@ describe("local seed data", () => {
   it("is useless with any other pepper, like the live one", async () => {
     const other = await pepperKeys("some-other-pepper-cccccccccccccccccccccccc");
     const row = await db.prepare("SELECT pin_hash FROM members WHERE member_number = '1001'").first();
-    expect(await verifySecret("111111", String(row?.pin_hash), other)).toBe(false);
+    expect(await verifySecret("111111", String(row?.pin_hash), other, PBKDF2_ITERATIONS)).toBe(false);
   });
 
   it("has the club's starting rooms and hours, bookings (with their slots), events, no-shows and a suspension", async () => {
@@ -111,7 +111,7 @@ describe("local seed data", () => {
   });
 
   it("can be applied twice (it resets the data first)", async () => {
-    const statements = await buildSeed({ pepper: PEPPER, now: NOW });
+    const statements = await buildSeed({ pepper: PEPPER, now: NOW, rounds: PBKDF2_ITERATIONS });
     await db.batch(statements.map(({ sql, params }) => db.prepare(sql).bind(...params)));
     expect((await db.prepare("SELECT COUNT(*) AS n FROM members").first())?.n).toBe(5);
   });
