@@ -3,6 +3,7 @@
 
 import { bookingWindow, openRanges, withinOpenHours } from "../availability.js";
 import { CANCEL_CUTOFF_SECONDS, MAX_MEMBER_SECONDS, bookingRefusal } from "../bookings.js";
+import { activeSuspension, suspendedMessage } from "../discipline.js";
 import { HttpError, json } from "../http.js";
 import { bookingIcs } from "../ics.js";
 import { SLOT_SECONDS, clubParts } from "../time.js";
@@ -57,6 +58,10 @@ async function createBooking(ctx) {
   const date = clubParts(start).date;
   const window = bookingWindow(now);
   if (date > window.last) throw new HttpError(400, "outside_window", "You can book up to 30 days ahead.");
+
+  // The database refuses this too; checking first gives the member the end date.
+  const suspension = await activeSuspension(env.DB, member.memberId, now);
+  if (suspension) throw new HttpError(403, "suspended", suspendedMessage(suspension.until_date));
 
   const resource = await activeResource(env.DB, resourceId);
   if (!withinOpenHours(await openRanges(env.DB, resource.id, date), start, end)) {

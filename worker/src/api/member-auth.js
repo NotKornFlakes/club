@@ -2,6 +2,7 @@
 // Member login (member number + 6-digit PIN), logout and "who am I".
 
 import { hashIp, pepperKeys, verifyDummy, verifySecret } from "../crypto.js";
+import { activeSuspension, memberNoShowDates, suspendedMessage } from "../discipline.js";
 import { HttpError, clientIp, json } from "../http.js";
 import { MEMBER_COOKIE, clearCookie, createMemberSession } from "../sessions.js";
 import { throttleSettings } from "../settings.js";
@@ -69,12 +70,19 @@ async function logout(ctx) {
 }
 
 /**
- * The logged-in member, and the CSRF token their pages send with every change.
+ * The logged-in member, the CSRF token their pages send with every change, any suspension
+ * in force, and their own no-show dates for the last 12 months (dates only, never notes).
  * @param {Ctx} ctx
  */
 async function me(ctx) {
   const member = /** @type {import("../sessions.js").MemberSession} */ (ctx.member);
-  return json({ member_number: member.memberNumber, csrf_token: member.csrfToken });
+  const suspension = await activeSuspension(ctx.env.DB, member.memberId, ctx.now);
+  return json({
+    member_number: member.memberNumber,
+    csrf_token: member.csrfToken,
+    suspension: suspension ? { until_date: suspension.until_date, message: suspendedMessage(suspension.until_date) } : null,
+    no_shows: await memberNoShowDates(ctx.env.DB, member.memberId, ctx.now),
+  });
 }
 
 /**

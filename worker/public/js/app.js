@@ -1,7 +1,7 @@
 // @ts-check
 // "My bookings": the member's upcoming bookings, with cancel (24-hour rule) and
 // "Add to calendar".
-import { ApiError, api, byId, el, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
+import { ApiError, api, byId, el, formatClubDate, formatDate, formatRange, formatTime, me, say, wireLogout } from "./common.js";
 
 wireLogout();
 const message = byId("message");
@@ -60,9 +60,25 @@ async function loadBookings() {
   }
 }
 
+/** @param {string[]} dates YYYY-MM-DD, newest first */
+function showNoShows(dates) {
+  const box = byId("no-shows");
+  if (dates.length === 0) {
+    box.textContent = "None in the last 12 months.";
+    return;
+  }
+  const count = dates.length === 1 ? "1 in the last 12 months" : `${dates.length} in the last 12 months`;
+  box.replaceChildren(el("strong", { text: count }), el("ul", {}, dates.map((d) => el("li", { text: formatClubDate(d) }))));
+}
+
 try {
   const member = await me();
   byId("member-number").textContent = member.member_number;
+  if (member.suspension) {
+    say(byId("suspended"), member.suspension.message);
+    byId("book-link").hidden = true;
+  }
+  showNoShows(member.no_shows);
 } catch (error) {
   say(message, error instanceof ApiError ? error.message : "Couldn't load your details. Please reload the page.");
 }
