@@ -159,7 +159,7 @@ describe("private pages", () => {
     const session = await loginMember(await makeMember());
     const response = await session.get("/app");
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("You're logged in as member");
+    expect(await response.text()).toContain("<h1>My bookings</h1>");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
