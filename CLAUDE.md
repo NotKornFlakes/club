@@ -1,15 +1,19 @@
-# Club Booking Site: Project Brief
+# Club Website and Booking: Project Brief
 
 Read this at the start of every session. It is the source of truth for scope and decisions.
 
 ## Overview
-Secure, simple booking website for Pastime Athletic Club, a private members club in
-Syracuse, NY (500–1,000 members, mostly non-technical). The club's old WordPress site is
-shut down. The club's public website stays on Weebly (pastimeathleticclub.org); this
-project is only the member booking site, at book.pastimeathleticclub.org.
+Secure, simple website for Pastime Athletic Club, a private members club in Syracuse, NY
+(500–1,000 members, mostly non-technical). It's the club's whole website: public pages,
+a What's On calendar, a banquet inquiry form, and member booking. At launch, once the club
+approves, it replaces the club's Weebly site (pastimeathleticclub.org); the club's Blogger
+blog and Google Calendar are retired after that. The old WordPress site is already shut
+down.
+Scope changed 2026-11-28 from booking only to the whole site: `docs/full-site-plan.md`.
 
 Product direction: I plan to offer this to other clubs. Pastime is the first. Everything
-club-specific moves into one config file per club (planned in `docs/per-club-config.md`).
+club-specific lives in the club's own folder, `clubs/<club>/`: its settings file
+(`club.json`, built in #14) and, from the full-site work, its page text and photos.
 
 Same pattern as my portfolio repo: everything in Terraform (except the club's own DNS
 records; see Launch plan), GitHub Actions CI, changes
@@ -38,17 +42,21 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - Worker sets all security headers itself, also after launch: the zone and its settings
   belong to the club, not this project.
 - Plain HTML/CSS/JS, mobile-first, large buttons, simple wording.
-- Use the workers.dev URL until launch, then book.pastimeathleticclub.org (see Launch plan).
+- Use the workers.dev URL until launch, then the whole domain: pastimeathleticclub.org, with
+  www redirecting to it (see Launch plan).
 
 ## Public vs. private
-- Public: simple landing page (club name, contact, "Member login", a link back to
-  pastimeathleticclub.org), Rules page. The main public website is the Weebly site; the
-  booking site doesn't duplicate it.
-- Everything else requires login.
+- Public pages: Home, History, Athletics, Bowling, Bar & Banquets, Photos, Visit (address
+  and a plain OpenStreetMap link; no Google or other map embed), What's On, Rules, and the
+  login pages.
+- Page text and photos are the club's content, kept in `clubs/pastime/`, not in the code.
+- Everything else requires login (member, editor or admin).
 
 ## Out of scope
-- Banquet hall rentals.
 - Payments of any kind.
+- Booking or renting the banquet hall online (no contracts or deposits). The site takes
+  inquiries only (see Banquet inquiries).
+- Analytics.
 
 ## Member login (no email, no signup)
 - Members already have member numbers. Login = member number + 6-digit PIN that I issue.
@@ -72,9 +80,10 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - PIN sheets can only be printed at import/reset time (PINs are hashed; lost PIN = reset).
 
 ## Booking rules
-- Resources: basketball court, [room names]; possibly bowling lanes (pending club answer).
-  Open hours: [hours], configurable per resource, in America/New_York local time (stays
-  correct across DST).
+- Resources (confirm with the club): Gymnasium, 8 bowling lanes, President's Room, Century
+  Room, Lounge. Open hours: [hours], configurable per resource, in the club's local time
+  (America/New_York for Pastime; stays correct across DST). Whether and how members book
+  bowling lanes: pending club answer.
 - 15-minute blocks; a booking is 1+ consecutive blocks, max 2 hours.
 - Max 2 upcoming bookings per member (a booking counts until it ends).
 - Book up to 30 days ahead (rolling 30 days, not calendar months). Show it to members as
@@ -85,7 +94,43 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - "Add to calendar" (.ics download) after booking, for reminders.
 - Calendar of club events at other locations (view only).
 - Double booking prevented by a database constraint, not just the UI.
-- All times stored in UTC, displayed in America/New_York.
+- All times stored in UTC, displayed in the club's time zone.
+
+## What's On and programs
+- A public "What's On" calendar, generated from the booking system: programs and club
+  events marked public. Never member bookings, names or member numbers.
+- Programs are recurring blocks set once per season (end date at most 12 months out,
+  renewed when it ends): one place, one or more weekdays, a start and end time.
+  Starting programs (the club confirms end times, places and seasons): Mon–Fri 11 a.m.
+  Pickleball, Mon–Fri 3 p.m. Open gym, Sun 2 p.m. Ping Pong, Sat 8 a.m. Youth.
+- A program blocks its times for member booking. A date that clashes with an existing
+  member booking is skipped and listed (same rule as leagues).
+- Planned: leagues become programs that don't show on What's On.
+
+## Banquet inquiries
+- A public form on Bar & Banquets: name, email, request. It emails the club's inbox. No
+  payments, no online booking.
+- Spam protection: Turnstile always on this form, a hidden honeypot field, per-IP limits
+  (configurable; values kept private like the other limits), length limits, server-side
+  validation.
+- Sent only to the club's one fixed address, never to the address typed in, so the form
+  can't be used to email strangers. No line breaks allowed in header fields.
+- Not stored on the site: the email in the club's inbox is the only copy. The form says so.
+- Sent with Cloudflare Email Service from a sending subdomain to one verified club address.
+  Never onboard the bare domain for email (it would break the club's Google MX). Email
+  Sending is in beta; it needs the DNS move first.
+
+## Editor (club volunteer)
+- One club volunteer can have an editor login: same rules as admins (strong password +
+  TOTP, 12-hour sessions, own lockouts), created, reset and disabled by the admin; never
+  through the setup token. The editor limit is a club setting (Pastime: 1).
+- Editors can: programs, club events, and the club's own reservations (one-off bookings,
+  e.g. a banquet in the Century Room). They see member bookings only as "Member booking":
+  no names or numbers, and they can't cancel them.
+- Editors can't: members, PINs, PIN sheets, no-shows, suspensions, lockouts, admin or editor
+  accounts, courts, rooms and hours, club settings, the alarm panel, the audit log.
+- Enforced on the server, deny by default, with a test listing every route an editor may
+  call. Every editor action goes in the audit log.
 
 ## No-shows (honor system)
 - No check-in, no QR codes, no automatic tracking. Management reports problems to me.
@@ -116,8 +161,9 @@ Rules page linked in the footer:
   Pastime uses 1.
 - Separate admin login: strong password + TOTP 2FA. Separate cookie, 12-hour sessions.
 - Create/edit resources, hours, and club events.
-- Place one-off bookings with no date limit, and recurring blocks (leagues), both
-  overriding member rules.
+- Place one-off bookings with no date limit, and recurring blocks (leagues and programs),
+  both overriding member rules.
+- Create, reset and disable the editor's login.
 - Every league has a season with an end date, at most 12 months out. I renew a season
   when it ends.
 - When a league block clashes with an existing member booking: skip that date and list
@@ -127,15 +173,20 @@ Rules page linked in the footer:
 - Record no-shows, suspend/unsuspend members.
 - Members: bulk-import member numbers from CSV, add/disable a member, reset a PIN,
   export a printable PIN sheet (only at creation/reset).
-- Audit log of all admin actions, kept 24 months.
+- Audit log of all admin and editor actions, kept 24 months.
 
 ## Data & privacy
 - Store only: member number, optional display name (admin-only), hashed PIN, bookings,
-  no-shows, suspensions. No emails or phone numbers.
+  no-shows, suspensions, and the programs and events behind What's On. No emails or phone
+  numbers. Banquet inquiries are emailed to the club and never stored on the site.
+- Photos only with permission from the people in them. No identifiable children without a
+  parent's permission. Location data is removed from photo files.
 - Auto-delete bookings older than 12 months.
 - Auto-delete suspension records 12 months after the suspension ends (same as no-shows).
   The audit log entry about the suspension stays for its full 24 months.
-- No analytics. No third-party scripts except Turnstile while the alarm is on.
+- No analytics. No third-party scripts except Turnstile: on the login pages while the alarm
+  is on, and always on the banquet inquiry form. Links to other sites (OpenStreetMap) are
+  plain links, never embeds.
 
 ## Security requirements
 - Server-side validation on every request; parameterized D1 queries only.
@@ -146,6 +197,8 @@ Rules page linked in the footer:
 - Cloudflare API token scoped as tightly as possible (separate account makes account-wide
   rights = this project only); stored as a GitHub Actions secret.
 - Branch ruleset + required reviewer on production environment (set up after first PR).
+- The threat model also covers the new public surfaces: form spam and attempts to misuse it
+  for sending email, a stolen editor login, and photos of people.
 - The threat model must say plainly: a 6-digit PIN has only 1,000,000 possible values. If
   the D1 database ever leaked, hashing alone would not stop someone trying every PIN
   offline. The pepper, kept outside D1, is what protects PINs in that case.
@@ -154,29 +207,39 @@ Rules page linked in the footer:
 - Club name: Pastime Athletic Club
 - Location: Syracuse, NY. Founded 1892.
 - Mission: health, wellness, charity and sport.
-- Public website: pastimeathleticclub.org, on Weebly, and it stays there. Its menu gets a
-  "Member Booking" link to the booking site.
-- Booking site: book.pastimeathleticclub.org (workers.dev address until launch).
+- Today: pastimeathleticclub.org on Weebly, a Blogger blog and a Google Calendar. All three
+  are retired after launch, once the club approves the new site.
+- This site: pastimeathleticclub.org, with www redirecting to it (workers.dev address until
+  launch). The planned book. address is dropped.
+- Email: Google, and it stays.
 - Contact: [ ]
-- Rooms: [ ]
-- Bowling lanes: [pending club answer]
+- Street address: [ ] (Syracuse, NY)
+- Rooms (confirm with club): Gymnasium, 8 bowling lanes, President's Room, Century Room,
+  Lounge.
 - Hours: [ ]
-- With the per-club config PR, these values move to `clubs/pastime/club.json`.
+- These values live in `clubs/pastime/club.json` (built in #14; the bowling lanes are added
+  once the club confirms).
 
-## Launch plan (custom domain)
+## Launch plan (whole domain)
+- Launch serves the whole domain (pastimeathleticclub.org; www redirects to it), only once
+  the club approves the new site. Old Weebly page addresses redirect to the new pages.
+- After a settling period agreed with the club: retire Weebly (cancel the plan), the Blogger
+  blog and the Google Calendar. Until then, rollback is putting the Weebly records back.
 - A Worker custom domain needs the domain to be an active zone on Cloudflare. Moving only
   one name (partial or subdomain setup) needs a Business or Enterprise plan. So all of
   pastimeathleticclub.org's DNS moves to the club's Cloudflare account ("full setup").
-- The Weebly site and email must keep working: every existing DNS record is copied
-  exactly, as "DNS only", before the nameservers change. The only new name is `book`.
+- The DNS move comes first and changes nothing anyone can see. The Weebly site and email
+  keep working: every existing DNS record is copied exactly, as "DNS only", before the
+  nameservers change.
 - After the move, the zone and all existing records belong to the club and are edited in the
   Cloudflare dashboard. No club DNS accounts: the club's DNS rarely changes, and any
   future change is a small task I do.
 - Optional after launch: SPF, DKIM and DMARC (`p=none` first) for the club's Google email
   (`docs/launch-dns.md`, step 8).
-- Terraform manages ONLY what this project needs: the `book` custom domain, plus CAA
-  records if ever needed. It never creates or imports the zone or the club's records, so
-  the drift check never sees them. A CI check enforces this.
+- Terraform manages ONLY what this project needs: the custom domains for the bare domain and
+  www, plus CAA records if ever needed. It never creates or imports the zone or the club's
+  records, so the drift check never sees them. A CI check enforces this. The email sending
+  subdomain is onboarded by me in the dashboard.
 - Step-by-step plan, checks and rollback: `docs/launch-dns.md`.
 - No DNS, nameserver or registrar changes until I say go. The registrar side (DNSSEC,
   nameservers) is mine alone.
@@ -184,11 +247,15 @@ Rules page linked in the footer:
 ## How to work
 1. Propose the architecture and D1 schema and wait for my approval before writing code.
 2. Build in small PRs: infra → member auth → availability view → booking →
-   no-shows and suspensions → admin → hardening → per-club config (after the stacked PRs
-   merge; `docs/per-club-config.md`) → custom domain (after the DNS move).
+   no-shows and suspensions → admin → hardening → per-club config (all built) → get the
+   stack onto main → editor role → programs and What's On → site layout and content pages →
+   bowling lanes → banquet inquiry form → hardening, second pass → launch on the whole
+   domain (after the DNS move and the club's approval) → retire Weebly, Blogger and Google
+   Calendar. Details: `docs/full-site-plan.md`, section 9.
 3. Explain each step in plain language. I'm learning as we go.
-4. README: setup, issuing/resetting PINs, adding leagues, suspending a member,
-   threat model, and a one-page "How to book" guide for members.
+4. README: setup, issuing/resetting PINs, adding leagues and programs, suspending a member,
+   the editor role, changing page text and photos, threat model, and a one-page "How to
+   book" guide for members.
 5. Only cite official sources (developers.cloudflare.com, github.com, owasp.org).
    Exception: Google's help (support.google.com, and knowledge.workspace.google.com where
    its Workspace pages now redirect), for the Google email-record step only
@@ -207,6 +274,8 @@ Rules page linked in the footer:
 - [x] Brief committed to the repo
 - [x] Architecture + D1 schema approved 2026-11-26, with changes (`docs/architecture.md`)
 - [ ] Branch ruleset + `production` environment reviewer set up (before the first merge)
-- [ ] Build steps (see How to work)
-- [ ] Per-club config (planned in `docs/per-club-config.md`; not built yet)
-- [ ] DNS move and custom domain (planned in `docs/launch-dns.md`; nothing changed yet)
+- [x] Build steps 1–7 and per-club config merged (#6–#12, #14)
+- [ ] Get #7–#12 and #14 onto main: each was merged into its parent branch, after that
+  parent had already been merged, so only #6 reached main. One PR brings the rest over.
+- [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; not built)
+- [ ] DNS move and launch (planned in `docs/launch-dns.md`; nothing changed yet)

@@ -1,7 +1,8 @@
 # Plan: one config file per club
 
-Status: **plan only. Nothing is built.** This PR comes after the stacked build PRs
-(#6–#12) merge, and before the custom-domain PR.
+Status: **built in #14** (on the stack; it reaches `main` together with #7–#12). With the
+whole-site scope (`docs/full-site-plan.md`), each club's page text and photos will also live
+in its folder, `clubs/<club>/`.
 
 ## Goal
 
