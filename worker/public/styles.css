@@ -242,3 +242,159 @@ button.button {
 .topbar [data-logout] {
   margin-left: auto;
 }
+
+/* ---------- Booking ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.choices {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.choice label {
+  display: block;
+  margin: 0;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.choice input:checked + label {
+  border-color: var(--accent);
+  background: var(--info-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.choice input:checked + label::before {
+  content: "✓ ";
+}
+
+.choice input:focus-visible + label {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.day-picker {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.day-picker input {
+  margin: 0;
+}
+
+.day-picker .button {
+  padding: 0.75rem 1rem;
+}
+
+.day-label {
+  font-weight: 600;
+  font-size: 1.2rem;
+}
+
+.legend {
+  color: var(--muted);
+}
+
+.swatch {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.25rem 0 0.75rem;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.swatch-free {
+  background: var(--free);
+}
+
+.swatch-taken {
+  background: var(--taken);
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot,
+.slot-button {
+  display: flex;
+  flex-direction: column;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.slot-button {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  background: var(--free);
+}
+
+.slot-time {
+  font-weight: 700;
+}
+
+.slot-free {
+  background: var(--free);
+}
+
+.slot-taken,
+.slot-past {
+  background: var(--taken);
+  color: var(--muted);
+}
+
+.slot-free:has(.slot-button) {
+  padding: 0;
+  border: 0;
+}
+
+.slot-note {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+
+.card {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.card h3 {
+  margin-top: 0;
+}
