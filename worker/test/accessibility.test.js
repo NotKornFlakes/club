@@ -93,12 +93,19 @@ describe("colour contrast (WCAG AA)", () => {
   const schemes = {};
 
   beforeAll(async () => {
-    const css = await (await get("/styles.css")).text();
-    const light = variables(css.slice(css.indexOf(":root"), css.indexOf("}", css.indexOf(":root"))));
-    const darkStart = css.indexOf("prefers-color-scheme: dark");
-    const dark = { ...light, ...variables(css.slice(darkStart, css.indexOf("}", css.indexOf(":root", darkStart)))) };
-    schemes.light = light;
-    schemes.dark = dark;
+    /** The light and dark colour variables in one stylesheet. @param {string} css */
+    const read = (css) => {
+      const light = variables(css.slice(css.indexOf(":root"), css.indexOf("}", css.indexOf(":root"))));
+      const darkStart = css.indexOf("prefers-color-scheme: dark");
+      const dark = variables(css.slice(darkStart, css.indexOf("}", css.indexOf(":root", darkStart))));
+      return { light, dark };
+    };
+    // The site's colours, with the club's own colours (/club.css, loaded after) on top.
+    const site = read(await (await get("/styles.css")).text());
+    const club = read(await (await get("/club.css")).text());
+    expect(Object.keys(club.light).sort()).toEqual(["accent", "accent-text"]);
+    schemes.light = { ...site.light, ...club.light };
+    schemes.dark = { ...site.light, ...site.dark, ...club.light, ...club.dark };
   });
 
   // [text colour, background colour, minimum ratio] — 4.5 for text, 3 for borders and controls.

@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Book a time – [Club name]</title>
+  <title data-club-title>Book a time</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/club.css">
   <script type="module" src="/js/book.js"></script>
 </head>
 <body>
@@ -20,7 +21,8 @@
   </header>
   <main id="main">
     <h1>Book a time</h1>
-    <p class="lead">You can book up to 30 days ahead, in 15-minute blocks, for up to 2 hours.</p>
+    <p class="lead">You can book up to <span data-club="days_ahead"></span> ahead, in 15-minute
+      blocks, for up to <span data-club="max_length"></span>.</p>
 
     <div id="suspended" class="message message-error" role="status" hidden></div>
     <p id="message" class="message" role="alert" tabindex="-1" hidden></p>

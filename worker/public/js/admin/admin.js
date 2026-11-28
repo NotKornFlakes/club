@@ -5,7 +5,7 @@ import { ApiError, CLUB_TIME_ZONE, byId, formatDate, formatTime, me, say, useSes
 useSession("/api/admin/me");
 wireLogout();
 
-/** Today's club date (New York), as YYYY-MM-DD. */
+/** Today's club date (club time), as YYYY-MM-DD. */
 export function clubToday() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: CLUB_TIME_ZONE }).format(new Date());
 }

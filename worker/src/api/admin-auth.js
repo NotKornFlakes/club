@@ -4,6 +4,7 @@
 // Admin logins go through the same throttling as members, with their own lockout counters.
 
 import { auditEntry } from "../audit.js";
+import { CLUB } from "../club.js";
 import { decryptText, encryptText, hashIp, hashSecret, pepperKeys, textEqual, verifyDummy, verifySecret } from "../crypto.js";
 import { HttpError, clientIp, json } from "../http.js";
 import { ADMIN_COOKIE, clearCookie, createAdminSession } from "../sessions.js";
@@ -17,8 +18,10 @@ import { bool, onlyFields, optionalStr, str } from "../validate.js";
 
 export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,40}$/;
 export const MIN_PASSWORD_LENGTH = 16;
-export const MAX_ADMINS = 2;
-const ISSUER = "Club Bookings";
+/** How many admins setup allows (club settings; 2 unless the club says otherwise). */
+export const MAX_ADMINS = CLUB.max_admins;
+/** The name authenticator apps show next to the code. */
+const ISSUER = `${CLUB.name} admin`;
 const WRONG = "That username, password and code don't match. Please check them and try again.";
 
 /** @param {Record<string, unknown>} body */
