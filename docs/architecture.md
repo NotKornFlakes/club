@@ -247,6 +247,13 @@ never stored in the repo, D1 or Terraform state.
   which numbers exist.
 - New PINs are 6 random digits from `crypto.getRandomValues`, with rejection sampling so
   every PIN is equally likely.
+- **Demo sites** (`DEMO_MODE` exactly `on`, made-up data only, decided 2026-11-28): 1,000
+  rounds instead of 100,000, so a login fits the Free plan's 10 ms of CPU.
+  - The count is in each hash, and a check accepts only the site's own count. So a demo
+    hash never works at full strength, and the other way round.
+  - A hash that's unreadable or has the other count is still hashed once before it's
+    refused, so timing doesn't show it.
+  - A demo also puts a banner on every page and sends `X-Robots-Tag: noindex, nofollow`.
 - Admin passwords: at least 16 characters (my call; use the password manager).
 
 ### Login throttling

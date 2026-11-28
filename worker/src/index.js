@@ -17,6 +17,7 @@ import { memberAuthRoutes } from "./api/member-auth.js";
 import { weekRoutes } from "./api/week.js";
 import { clubScript, clubStylesheet, fillClubPage } from "./club-pages.js";
 import { CLUB } from "./club.js";
+import { isDemo } from "./demo.js";
 import { withSecurityHeaders } from "./headers.js";
 import { json, methodNotAllowed, redirect } from "./http.js";
 import { LOGIN_PAGES, pageAccess, pagePath } from "./pages.js";
@@ -56,7 +57,7 @@ async function servePage(request, env, page) {
   const headers = new Headers(request.headers);
   headers.delete("If-None-Match");
   headers.delete("If-Modified-Since");
-  return fillClubPage(await env.ASSETS.fetch(new Request(request, { headers })), page);
+  return fillClubPage(await env.ASSETS.fetch(new Request(request, { headers })), page, { demo: isDemo(env) });
 }
 
 /**
@@ -111,12 +112,13 @@ export default {
   async fetch(request, env) {
     try {
       const { response, noStore, turnstile } = await route(request, env);
-      return withSecurityHeaders(response, { noStore, turnstile });
+      return withSecurityHeaders(response, { noStore, turnstile, demo: isDemo(env) });
     } catch (error) {
       // Log the kind of failure only, never request data.
       console.error("unhandled_error", error instanceof Error ? error.name : typeof error);
       return withSecurityHeaders(json({ error: "server_error", message: "Something went wrong. Please try again." }, 500), {
         noStore: true,
+        demo: isDemo(env),
       });
     }
   },

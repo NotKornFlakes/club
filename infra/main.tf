@@ -62,6 +62,13 @@ resource "cloudflare_workers_script" "club" {
       name = "THROTTLE_SETTINGS"
       text = var.throttle_settings
     },
+    # "on" only for a demo site with made-up data (README, "Demo site"). Anything else is
+    # the full-strength site.
+    {
+      type = "plain_text"
+      name = "DEMO_MODE"
+      text = var.demo_mode ? "on" : "off"
+    },
     # Turnstile's public site key. The secret is set by hand with wrangler (README step 3).
     {
       type = "plain_text"

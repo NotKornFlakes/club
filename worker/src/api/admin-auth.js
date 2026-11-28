@@ -5,7 +5,7 @@
 
 import { auditEntry } from "../audit.js";
 import { CLUB } from "../club.js";
-import { decryptText, encryptText, hashIp, hashSecret, pepperKeys, textEqual, verifyDummy, verifySecret } from "../crypto.js";
+import { decryptText, encryptText, hashIp, hashRounds, hashSecret, pepperKeys, textEqual, verifyDummy, verifySecret } from "../crypto.js";
 import { HttpError, clientIp, json } from "../http.js";
 import { ADMIN_COOKIE, clearCookie, createAdminSession } from "../sessions.js";
 import { throttleSettings } from "../settings.js";
@@ -90,7 +90,7 @@ async function setupFinish(ctx) {
       env.DB.prepare(
         `INSERT INTO admins (username, password_hash, totp_secret_enc, totp_last_step, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-      ).bind(username, await hashSecret(pass, throttle.keys), await encryptText(secret, throttle.keys), step, now, now),
+      ).bind(username, await hashSecret(pass, throttle.keys, hashRounds(env)), await encryptText(secret, throttle.keys), step, now, now),
       auditEntry(env.DB, { at: now, adminId: null, action: "admin.enrol", target: `admin:${username}` }),
     ])
   );
@@ -111,7 +111,7 @@ async function login(ctx) {
     .bind(username)
     .first();
   if (!admin || admin.status !== "active") {
-    await verifyDummy(pass, keys);
+    await verifyDummy(pass, keys, hashRounds(env));
     await recordFailure({ db: env.DB, kind: "admin", ipHash, memberId: null, settings, now });
     throw new HttpError(401, "wrong", WRONG);
   }
@@ -119,7 +119,7 @@ async function login(ctx) {
   const claim = await claimAttempt(env.DB, "admin", adminId, now);
   if (!claim) throw lockedError((await lockedUntil(env.DB, "admin", adminId)) ?? now);
 
-  const passwordOk = await verifySecret(pass, String(admin.password_hash), keys);
+  const passwordOk = await verifySecret(pass, String(admin.password_hash), keys, hashRounds(env));
   const step = passwordOk
     ? await verifyTotp(await decryptText(String(admin.totp_secret_enc), keys), code, now, Number(admin.totp_last_step))
     : null;

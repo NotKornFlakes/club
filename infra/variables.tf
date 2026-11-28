@@ -24,6 +24,12 @@ variable "site_hostname" {
   }
 }
 
+variable "demo_mode" {
+  description = "A demo site with made-up data only: lighter PIN hashing (fits the Workers Free plan), a demo banner, not listed by search engines. From the DEMO_MODE GitHub variable (\"on\"). Never for the club's real site."
+  type        = bool
+  default     = false
+}
+
 variable "state_bucket_name" {
   description = "The R2 bucket that holds Terraform state (created by hand once; see README)."
   type        = string

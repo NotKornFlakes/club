@@ -40,8 +40,9 @@ export const SECURITY_HEADERS = Object.freeze({
  * Responses from fetch() have read-only headers, so we always copy.
  *
  * @param {Response} response
- * @param {{ noStore?: boolean, turnstile?: boolean }} [options] noStore: forbid caching (API answers,
- *   private pages); turnstile: allow Turnstile in the CSP (login pages while the alarm is on)
+ * @param {{ noStore?: boolean, turnstile?: boolean, demo?: boolean }} [options] noStore: forbid caching
+ *   (API answers, private pages); turnstile: allow Turnstile in the CSP (login pages while the
+ *   alarm is on); demo: ask search engines not to list or follow anything (demo sites)
  * @returns {Response}
  */
 export function withSecurityHeaders(response, options = {}) {
@@ -54,6 +55,9 @@ export function withSecurityHeaders(response, options = {}) {
   }
   if (options.noStore) {
     out.headers.set("Cache-Control", "no-store");
+  }
+  if (options.demo) {
+    out.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return out;
 }

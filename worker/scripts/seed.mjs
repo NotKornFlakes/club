@@ -11,6 +11,7 @@
 // Usage (with `npm run dev` stopped): npm run seed
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { hashRounds } from "../src/crypto.js";
 import { ensureDevVars } from "./dev-vars.mjs";
 import { SEED_ADMIN, SEED_ALLEY_LEAGUE, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
 
@@ -40,7 +41,8 @@ if (!vars.PEPPER) {
 
 run(migrate);
 
-const statements = await buildSeed({ pepper: vars.PEPPER, now: Math.floor(Date.now() / 1000) });
+// Hashed the way the local site will check them: lighter if .dev.vars says DEMO_MODE=on.
+const statements = await buildSeed({ pepper: vars.PEPPER, now: Math.floor(Date.now() / 1000), rounds: hashRounds(vars) });
 mkdirSync(new URL("../.wrangler", import.meta.url), { recursive: true });
 writeFileSync(file, toSqlScript(statements));
 run(load);

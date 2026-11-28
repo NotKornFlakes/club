@@ -39,6 +39,12 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - Workers Paid plan ($5/month) needed for PIN hashing CPU time: Free allows 10 ms CPU per
   request, Paid defaults to 30 s (developers.cloudflare.com/workers/platform/limits/).
   [confirm with management]
+- Demo (decided 2026-11-28): before the club's account exists, the site runs as a demo in
+  my own Cloudflare account on the Free plan, with made-up data only. Demo mode
+  (`DEMO_MODE` = `on`): 1,000 PBKDF2 rounds instead of 100,000, a "Demo site" banner on
+  every page, not indexed by search engines. The club's real site: the club's account, the
+  Paid plan, full strength, a new database. The demo account's name and address stay out
+  of the repo.
 - Worker sets all security headers itself, also after launch: the zone and its settings
   belong to the club, not this project.
 - Plain HTML/CSS/JS, mobile-first, large buttons, simple wording.
@@ -312,4 +318,5 @@ Rules page linked in the footer:
 - [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; decisions agreed). Steps 2, 3
   and 4 (programs and This Week, the pages, bowling lanes) built early on 2026-11-28 as a
   demo for the club, in one PR. Steps 1 and 5–9 still wait until I've met the club.
+- [ ] Demo on my own Cloudflare account (Free plan, demo mode, made-up data)
 - [ ] DNS move and launch (planned in `docs/launch-dns.md`; nothing changed yet)

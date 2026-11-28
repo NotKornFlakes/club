@@ -7,7 +7,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MAX_ADMINS } from "../src/api/admin-auth.js";
 import { CLUB } from "../src/club.js";
-import { hashSecret, pepperKeys as keysFor } from "../src/crypto.js";
+import { hashRounds, hashSecret, pepperKeys as keysFor } from "../src/crypto.js";
 import worker from "../src/index.js";
 import { base32Decode, totpCode, totpStep } from "../src/totp.js";
 import { ORIGIN, db, newIp, nowSeconds, post, resetThrottle } from "./helpers.js";
@@ -108,7 +108,7 @@ describe("resetting the other admin", () => {
       const keys = await keysFor(env.PEPPER);
       await db
         .prepare("INSERT INTO admins (username, password_hash, totp_secret_enc, created_at, updated_at) VALUES ('backup', ?, 'unused', ?, ?)")
-        .bind(await hashSecret("a different long admin password", keys), nowSeconds(), nowSeconds())
+        .bind(await hashSecret("a different long admin password", keys, hashRounds(env)), nowSeconds(), nowSeconds())
         .run();
     }
     await db.prepare("UPDATE admins SET totp_last_step = 0").run();

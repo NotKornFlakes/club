@@ -28,6 +28,9 @@
       }
     }
   ],
+  "vars": {
+    "DEMO_MODE": "off"
+  },
   "secrets": {
     "required": [
       "PEPPER",

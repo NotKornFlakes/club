@@ -3,7 +3,7 @@
 // other's login if they lose their password or authenticator.
 
 import { auditEntry } from "../audit.js";
-import { encryptText, hashSecret, pepperKeys, randomToken } from "../crypto.js";
+import { encryptText, hashRounds, hashSecret, pepperKeys, randomToken } from "../crypto.js";
 import { HttpError, json } from "../http.js";
 import { endAllAdminSessions } from "../sessions.js";
 import { clearLock } from "../throttle.js";
@@ -74,7 +74,7 @@ async function resetAdmin(ctx) {
     ctx.env.DB.prepare(
       `UPDATE admins SET password_hash = ?, totp_secret_enc = ?, totp_last_step = 0, failed_logins = 0, lock_level = 0,
               locked_until = NULL, last_failed_at = NULL, updated_at = ? WHERE id = ?`,
-    ).bind(await hashSecret(password, keys), await encryptText(secret, keys), ctx.now, id),
+    ).bind(await hashSecret(password, keys, hashRounds(ctx.env)), await encryptText(secret, keys), ctx.now, id),
     endAllAdminSessions(ctx.env.DB, id),
     auditEntry(ctx.env.DB, { at: ctx.now, adminId: adminOf(ctx).adminId, action: "admin.reset", target: `admin:${String(target.username)}` }),
   ]);

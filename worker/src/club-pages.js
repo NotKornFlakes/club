@@ -10,6 +10,7 @@
 import { publicClub } from "./club-config.js";
 import { CONTENT } from "./club-content.js";
 import { CLUB } from "./club.js";
+import { DEMO_BANNER } from "./demo.js";
 
 /** The site menu, in order. */
 export const NAV = Object.freeze([
@@ -135,16 +136,23 @@ function galleryHtml() {
  *   <ul data-club-photos></ul>                  → the gallery
  *   <div data-club-contact></div>               → address, map link, phone, email, links
  *   <ul data-club-rules></ul>                   → one <li> per booking rule
+ * On a demo site, the demo banner goes at the top of the page body.
  * @param {Response} response @param {string} page the page path, e.g. "/week"
+ * @param {{ demo?: boolean }} [options]
  * @returns {Response}
  */
-export function fillClubPage(response, page) {
+export function fillClubPage(response, page, options = {}) {
   const type = response.headers.get("Content-Type") ?? "";
   if (!type.startsWith("text/html")) return response;
   /** @param {Element} el @param {string} html */
   const fill = (el, html) => el.setInnerContent(html, { html: true });
   const filled = response.body
     ? new HTMLRewriter()
+        .on("body", {
+          element(el) {
+            if (options.demo) el.prepend(`<p class="demo-banner">${escapeText(DEMO_BANNER)}</p>`, { html: true });
+          },
+        })
         .on("title[data-club-title]", {
           element(el) {
             el.removeAttribute("data-club-title");
