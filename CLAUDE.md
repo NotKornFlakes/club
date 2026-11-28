@@ -125,8 +125,11 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
   TOTP, 12-hour sessions, own lockouts), created, reset and disabled by the admin; never
   through the setup token. The editor limit is a club setting (Pastime: 1).
 - Editors can: programs, club events, and the club's own reservations (one-off bookings,
-  e.g. a banquet in the Century Room). They see member bookings only as "Member booking":
-  no names or numbers, and they can't cancel them.
+  e.g. a banquet in the Century Room). They see member bookings only as "Member booking",
+  never names or numbers.
+- Editors may cancel a member booking, but only with a required reason. The cancellation
+  and reason go in the audit log, and the member sees a notice that the club cancelled it
+  (decided 2026-11-28).
 - Editors can't: members, PINs, PIN sheets, no-shows, suspensions, lockouts, admin or editor
   accounts, courts, rooms and hours, club settings, the alarm panel, the audit log.
 - Enforced on the server, deny by default, with a test listing every route an editor may
@@ -276,6 +279,7 @@ Rules page linked in the footer:
 - [ ] Branch ruleset + `production` environment reviewer set up (before the first merge)
 - [x] Build steps 1–7 and per-club config merged (#6–#12, #14)
 - [ ] Get #7–#12 and #14 onto main: each was merged into its parent branch, after that
-  parent had already been merged, so only #6 reached main. One PR brings the rest over.
-- [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; not built)
+  parent had already been merged, so only #6 reached main. PR #16 brings the rest over.
+- [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; decisions agreed; not
+  built). Steps 1–9 wait until I've met the club.
 - [ ] DNS move and launch (planned in `docs/launch-dns.md`; nothing changed yet)
