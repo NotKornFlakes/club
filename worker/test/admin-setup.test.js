@@ -1,9 +1,13 @@
 // @ts-check
-// First-time admin setup (needs ADMIN_SETUP_TOKEN and fewer than 2 admins), and one admin
-// resetting the other's login. Its own file, so it starts with an empty admins table.
+// First-time admin setup (needs ADMIN_SETUP_TOKEN and fewer admins than the club's limit:
+// 1 for Pastime), and one admin resetting the other's login. Its own file, so it starts with
+// an empty admins table.
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { MAX_ADMINS } from "../src/api/admin-auth.js";
+import { CLUB } from "../src/club.js";
+import { hashSecret, pepperKeys as keysFor } from "../src/crypto.js";
 import worker from "../src/index.js";
 import { base32Decode, totpCode, totpStep } from "../src/totp.js";
 import { ORIGIN, db, newIp, nowSeconds, post, resetThrottle } from "./helpers.js";
@@ -74,25 +78,39 @@ describe("first-time setup", () => {
     expect(wrong.status).toBe(400);
   });
 
-  it("enrols two admins who can then log in, then closes", async () => {
+  it("uses the club's admin limit: 1 for Pastime", () => {
+    expect(MAX_ADMINS).toBe(CLUB.max_admins);
+    expect(MAX_ADMINS).toBe(1);
+  });
+
+  it("enrols up to the club's limit of admins, who can then log in, then closes", async () => {
     const first = await enrol("owner");
     expect(first.response.status).toBe(201);
     // The setup code is used up; the next one works.
     expect((await login("owner", PASSWORD, await codeFor(first.secret))).status).toBe(401);
     expect((await login("owner", PASSWORD, await codeFor(first.secret, 1))).status).toBe(200);
 
-    expect((await enrol("backup")).response.status).toBe(201);
-    const third = await post("/api/admin/setup/start", { setup_token: TOKEN }, { ip: newIp() });
-    expect(third.status).toBe(403);
-    expect((await third.json()).error).toBe("setup_closed");
+    for (let n = 2; n <= MAX_ADMINS; n += 1) expect((await enrol(n === 2 ? "backup" : `admin-${n}`)).response.status).toBe(201);
+    const oneMore = await post("/api/admin/setup/start", { setup_token: TOKEN }, { ip: newIp() });
+    expect(oneMore.status).toBe(403);
+    expect((await oneMore.json()).error).toBe("setup_closed");
 
     const audit = await db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'admin.enrol'").first();
-    expect(audit?.n).toBe(2);
+    expect(audit?.n).toBe(MAX_ADMINS);
   });
 });
 
 describe("resetting the other admin", () => {
   it("gives them a new password and key once, logs them out, and can't be done to yourself", async () => {
+    // With a limit of 1, setup made only the owner. Add the second admin straight into the
+    // database (as setup would for a club with the default limit of 2).
+    if (!(await db.prepare("SELECT id FROM admins WHERE username = 'backup'").first())) {
+      const keys = await keysFor(env.PEPPER);
+      await db
+        .prepare("INSERT INTO admins (username, password_hash, totp_secret_enc, created_at, updated_at) VALUES ('backup', ?, 'unused', ?, ?)")
+        .bind(await hashSecret("a different long admin password", keys), nowSeconds(), nowSeconds())
+        .run();
+    }
     await db.prepare("UPDATE admins SET totp_last_step = 0").run();
     const owner = await db.prepare("SELECT id, totp_secret_enc FROM admins WHERE username = 'owner'").first();
     const backup = await db.prepare("SELECT id FROM admins WHERE username = 'backup'").first();

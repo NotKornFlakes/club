@@ -4,10 +4,12 @@
 // Members see their own no-show dates (never the notes) and any active suspension.
 
 import { auditEntry } from "./audit.js";
+import { CLUB } from "./club.js";
 import { HttpError } from "./http.js";
 import { addDays, addMonths, clubParts, clubTimeToUtc, clubToday } from "./time.js";
 
-export const DEFAULT_SUSPENSION_MONTHS = 6;
+/** The suggested suspension length (club settings). */
+export const DEFAULT_SUSPENSION_MONTHS = CLUB.booking.suspension_months;
 /** No-shows are shown (and kept) for 12 months. */
 const NO_SHOW_DAYS = 365;
 
@@ -21,7 +23,7 @@ export function suspensionUntilDate(endsAt) {
   return clubParts(endsAt - 1).date;
 }
 
-/** The default "until" date for a new suspension: 6 months from today. @param {number} now */
+/** The default "until" date for a new suspension, that many months from today. @param {number} now */
 export function defaultSuspensionUntil(now) {
   return addMonths(clubToday(now), DEFAULT_SUSPENSION_MONTHS);
 }

@@ -1,14 +1,18 @@
 // @ts-check
 // Booking rules shared by member and admin code, and the database's refusals in plain words.
 
+import { CLUB } from "./club.js";
 import { HttpError } from "./http.js";
 
+// These come from the club's settings file. The database also refuses anything over its own
+// ceilings (2 hours, 2 upcoming bookings), whatever a club's file says.
+
 /** Members can cancel only this long (or more) before the start. Admins can always cancel. */
-export const CANCEL_CUTOFF_SECONDS = 24 * 3600;
-/** A member booking is at most 2 hours. */
-export const MAX_MEMBER_SECONDS = 2 * 3600;
+export const CANCEL_CUTOFF_SECONDS = CLUB.booking.cancel_cutoff_hours * 3600;
+/** The longest member booking. */
+export const MAX_MEMBER_SECONDS = CLUB.booking.max_length_minutes * 60;
 /** A member can have at most this many upcoming bookings (each counts until it ends). */
-export const MAX_UPCOMING = 2;
+export const MAX_UPCOMING = CLUB.booking.max_upcoming;
 
 /**
  * Turns a database refusal (from a trigger or constraint) into a plain-words answer.
@@ -25,7 +29,7 @@ export function bookingRefusal(error) {
     throw new HttpError(
       409,
       "too_many_upcoming",
-      "You already have 2 upcoming bookings. You can book again when one has finished or been cancelled.",
+      `You already have ${CLUB.phrases.max_upcoming}. You can book again when one has finished or been cancelled.`,
     );
   }
   if (text.includes("member_suspended")) {

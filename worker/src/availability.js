@@ -2,10 +2,11 @@
 // Opening hours and 15-minute slots for one resource on one club date. Members only ever
 // see "free", "taken" or "past": never who booked.
 
+import { CLUB } from "./club.js";
 import { SLOT_SECONDS, addDays, clubTimeToUtc, clubToday, weekdayOf } from "./time.js";
 
-/** Members can book any slot on or before the club date this many days from today. */
-export const BOOKING_WINDOW_DAYS = 30;
+/** Members can book any slot on or before the club date this many days from today (club settings). */
+export const BOOKING_WINDOW_DAYS = CLUB.booking.days_ahead;
 
 /** @typedef {{ start: number, end: number }} Range */
 /** @typedef {{ start: number, end: number, state: "free" | "taken" | "past" }} Slot */

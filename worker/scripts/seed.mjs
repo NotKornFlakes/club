@@ -1,13 +1,14 @@
 // @ts-check
 // Resets the LOCAL database (worker/.wrangler) to known test data: 5 fake members, 1 test
-// admin, resources, hours, a few bookings and events. It only ever runs wrangler with
-// --local, and takes no options, so it can't be pointed at the live database.
+// admin, the club's starting rooms and hours, two league seasons, a few bookings and events.
+// It only ever runs wrangler with --local, and takes no options, so it can't be pointed at
+// the live database.
 //
 // Usage (with `npm run dev` stopped): npm run seed
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ensureDevVars } from "./dev-vars.mjs";
-import { SEED_ADMIN, SEED_MEMBERS, buildSeed, toSqlScript } from "./seed-data.js";
+import { SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, buildSeed, toSqlScript } from "./seed-data.js";
 
 if (process.argv.length > 2) {
   console.error("npm run seed takes no options. It only ever writes to the local database.");
@@ -37,4 +38,5 @@ console.log("\nLocal test data is ready. Start the site with: npm run dev\n");
 console.log("Members (member number / PIN):");
 for (const m of SEED_MEMBERS) console.log(`  ${m.number} / ${m.pin}`);
 console.log(`\nAdmin: username "${SEED_ADMIN.username}", password "${SEED_ADMIN.password}".`);
+console.log(`Leagues: ${SEED_LEAGUES.map((l) => l.name).join(", ")}.`);
 console.log("For the 6-digit code, run: npm run totp");

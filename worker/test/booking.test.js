@@ -3,6 +3,8 @@
 // 24-hour cancel rule, .ics download, and the events calendar.
 import { exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { escapeText } from "../src/club-pages.js";
+import { CLUB } from "../src/club.js";
 import { addDays, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
 import { ORIGIN, db, get, loginMember, makeMember, nowSeconds, post } from "./helpers.js";
 
@@ -247,12 +249,16 @@ describe("club events", () => {
 });
 
 describe("the rules shown before booking", () => {
-  it("match the Rules page word for word", async () => {
+  it("match the Rules page word for word, both from the club's settings file", async () => {
     const page = await (await exports.default.fetch(`${ORIGIN}/rules`)).text();
-    const script = await (await exports.default.fetch(`${ORIGIN}/js/rules.js`)).text();
     const fromPage = [...page.matchAll(/<li>(.*?)<\/li>/g)].map((m) => m[1]);
-    const fromScript = [...script.matchAll(/^ {2}"(.*)",$/gm)].map((m) => m[1]);
     expect(fromPage).toHaveLength(5);
-    expect(fromScript).toEqual(fromPage);
+    expect(fromPage).toEqual(CLUB.rules.map(escapeText));
+
+    const script = await (await exports.default.fetch(`${ORIGIN}/js/club.js`)).text();
+    const settings = JSON.parse(script.slice(script.indexOf("{"), script.lastIndexOf("}") + 1));
+    expect(settings.rules).toEqual(CLUB.rules);
+    // The confirmation step lists exactly those.
+    expect(await (await exports.default.fetch(`${ORIGIN}/js/book.js`)).text()).toContain("CLUB.rules.map(");
   });
 });
