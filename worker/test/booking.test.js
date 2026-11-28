@@ -5,6 +5,7 @@ import { exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { escapeText } from "../src/club-pages.js";
 import { CLUB } from "../src/club.js";
+import { insertMemberBooking } from "../src/bookings.js";
 import { addDays, clubTimeToUtc, clubToday, nextSlot } from "../src/time.js";
 import { ORIGIN, db, get, loginMember, makeMember, nowSeconds, post } from "./helpers.js";
 
@@ -115,16 +116,14 @@ describe("booking", () => {
     });
   });
 
-  it("allows 2 upcoming bookings, and a third once one is cancelled", async () => {
+  it("has no limit on upcoming bookings at Pastime (its settings say none)", async () => {
+    expect(CLUB.booking.limit).toEqual({ kind: "none" });
     const session = await loginMember(await makeMember());
     const day = addDays(today, 5);
-    expect((await session.post("/api/bookings", slotBody(day, "06:00", "07:00"))).status).toBe(201);
-    const second = await (await session.post("/api/bookings", slotBody(day, "07:00", "08:00"))).json();
-    const third = await session.post("/api/bookings", slotBody(day, "08:00", "09:00"));
-    expect(third.status).toBe(409);
-    expect(await codeOf(third)).toBe("too_many_upcoming");
-    expect((await session.post(`/api/bookings/${second.booking.id}/cancel`)).status).toBe(200);
-    expect((await session.post("/api/bookings", slotBody(day, "08:00", "09:00"))).status).toBe(201);
+    for (const [from, to] of [["06:00", "07:00"], ["07:00", "08:00"], ["08:00", "09:00"], ["09:00", "10:00"], ["10:00", "12:00"]]) {
+      expect((await session.post("/api/bookings", slotBody(day, from, to))).status, from).toBe(201);
+    }
+    expect((await (await session.get("/api/my-bookings")).json()).bookings).toHaveLength(5);
   });
 
   it("refuses unknown fields and needs the CSRF token", async () => {
@@ -261,5 +260,80 @@ describe("the rules shown before booking", () => {
     expect(settings.rules).toEqual(CLUB.rules);
     // The confirmation step lists exactly those.
     expect(await (await exports.default.fetch(`${ORIGIN}/js/week.js`)).text()).toContain("CLUB.rules.map(");
+  });
+});
+
+describe("the kinds of booking limit a club can choose", () => {
+  const DAY = 86_400;
+  // Day 1 starts on a whole day well ahead, at 00:00 UTC (the arithmetic doesn't need club time).
+  const base = Math.ceil(nowSeconds() / DAY) * DAY + DAY;
+  /** @param {number} day @param {number} hour */
+  const at = (day, hour) => base + day * DAY + hour * H;
+  /** @type {number} */
+  let room;
+  /** @type {number} */
+  let other;
+  beforeAll(async () => {
+    room = await newResource("Limit room", "00:00", "24:00");
+    other = await newResource("Other room", "00:00", "24:00");
+  });
+
+  /** @param {import("../src/club-config.js").Limit} limit @param {number} memberId @param {number} start @param {number} end */
+  const book = (limit, memberId, start, end, resourceId = room) =>
+    insertMemberBooking(db, limit, { resourceId, memberId, start, end, now: nowSeconds() });
+  /** @param {number} id */
+  const cancel = (id) =>
+    db.prepare("UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'member' WHERE id = ?").bind(nowSeconds(), id).run();
+
+  it("upcoming: at most that many bookings that haven't ended; a cancelled one frees a place", async () => {
+    const limit = /** @type {const} */ ({ kind: "upcoming", max: 2 });
+    const member = await makeMember();
+    const first = await book(limit, member.id, at(1, 10), at(1, 11));
+    await book(limit, member.id, at(1, 12), at(1, 13));
+    await expect(book(limit, member.id, at(1, 14), at(1, 15))).rejects.toMatchObject({
+      code: "too_many_upcoming",
+      message: "You already have 2 upcoming bookings. You can book again when one has finished or been cancelled.",
+    });
+    await cancel(first);
+    await expect(book(limit, member.id, at(1, 14), at(1, 15))).resolves.toBeTypeOf("number");
+  });
+
+  it("hours per week: at most that many hours in any 7 days in a row", async () => {
+    const limit = /** @type {const} */ ({ kind: "hours_per_week", hours: 3 });
+    const member = await makeMember();
+    await book(limit, member.id, at(1, 10), at(1, 12)); // 2 hours
+    const b = await book(limit, member.id, at(3, 10), at(3, 11)); // 3 hours in 7 days
+    // Any more within 7 days of those is refused...
+    await expect(book(limit, member.id, at(5, 10), at(5, 10.25))).rejects.toMatchObject({ code: "over_hours_limit" });
+    await expect(book(limit, member.id, at(8, 9), at(8, 10))).rejects.toMatchObject({
+      code: "over_hours_limit",
+      message: "That would be more than 3 hours of bookings in 7 days in a row. Please pick a shorter time or another day.",
+    });
+    // ...but the 7 days roll on: day 8 at 10:00 is 7 days after day 1's 10:00 start.
+    await expect(book(limit, member.id, at(8, 10), at(8, 11))).resolves.toBeTypeOf("number");
+    await expect(book(limit, member.id, at(11, 10), at(11, 12))).resolves.toBeTypeOf("number");
+    // A cancelled booking no longer counts: 15 minutes on day 2 goes over (day 1 + day 3 + it)
+    // until day 3's booking is cancelled.
+    await expect(book(limit, member.id, at(2, 10), at(2, 10.25))).rejects.toMatchObject({ code: "over_hours_limit" });
+    await cancel(b);
+    await expect(book(limit, member.id, at(2, 10), at(2, 10.25))).resolves.toBeTypeOf("number");
+    // Day 5 still can't: the 7 days from day 5 hold day 8's hour and day 11's two.
+    await expect(book(limit, member.id, at(5, 10), at(5, 10.25))).rejects.toMatchObject({ code: "over_hours_limit" });
+  });
+
+  it("none: no count or hours limit", async () => {
+    const member = await makeMember();
+    for (let hour = 0; hour < 20; hour += 2) await expect(book({ kind: "none" }, member.id, at(14, hour), at(14, hour + 2))).resolves.toBeTypeOf("number");
+  });
+
+  it("admin bookings and leagues never count against a member", async () => {
+    const admin = await db.prepare("INSERT INTO admins (username, password_hash, totp_secret_enc, created_at, updated_at) VALUES ('limit-admin', 'x', 'x', 0, 0) RETURNING id").first();
+    await db
+      .prepare("INSERT INTO bookings (resource_id, kind, label, starts_at, ends_at, created_at, created_by_admin_id) VALUES (?, 'admin', 'Big event', ?, ?, ?, ?)")
+      .bind(other, at(20, 0), at(20, 23), nowSeconds(), admin?.id)
+      .run();
+    const member = await makeMember();
+    await expect(book({ kind: "upcoming", max: 1 }, member.id, at(20, 10), at(20, 11))).resolves.toBeTypeOf("number");
+    await expect(book({ kind: "hours_per_week", hours: 1 }, (await makeMember()).id, at(20, 12), at(20, 13))).resolves.toBeTypeOf("number");
   });
 });

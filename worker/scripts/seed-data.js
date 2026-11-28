@@ -152,9 +152,13 @@ export async function buildSeed({ pepper, now }) {
     }
   }
 
-  // Member bookings at times no program or league uses (rooms, a lane, and 9-10 p.m. in the gym).
+  // Member bookings at times no program or league uses (rooms, lanes, and 9-10 p.m. in the
+  // gym). Member 1001 has three upcoming: more than the old limit of 2, since this club's
+  // settings now have no limit.
   const memberBookings = [
     { id: 1, member: 1, resource: rooms[0] ?? gym, start: soon, end: soon + 3600 },
+    { id: 6, member: 1, resource: lanes[0] ?? gym, start: at(4, "18:00"), end: at(4, "19:00") },
+    { id: 7, member: 1, resource: rooms[2] ?? rooms[0] ?? gym, start: at(6, "10:00"), end: at(6, "12:00") },
     { id: 2, member: 5, resource: gym, start: at(1, "21:00"), end: at(1, "22:00") },
     { id: 3, member: 3, resource: rooms[1] ?? rooms[0] ?? gym, start: at(2, "10:00"), end: at(2, "11:30") },
     { id: 5, member: 2, resource: lanes[2] ?? gym, start: at(3, "19:00"), end: at(3, "20:00") },

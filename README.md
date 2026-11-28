@@ -184,10 +184,19 @@ message and script gets its values from there.
 - **Areas** (`areas`): the week view's switcher (Gym, Bowling lanes, Rooms).
 - **Redirects** (`redirects`): the old site's page addresses → the new pages, so old links
   keep working.
-- **Booking limits** (`booking`): the longest booking, upcoming bookings per member, days
-  ahead, the cancel cutoff, the suggested suspension length, and the missed-bookings count
-  in the rules. The database also enforces 2 hours and 2 upcoming bookings for every club,
-  so a club can set those or less, never more.
+- **Booking limits** (`booking`): the longest booking, how much a member may book
+  (`limit`), days ahead, the cancel cutoff, the suggested suspension length, and the
+  missed-bookings count in the rules. The database also enforces 2 hours per booking for
+  every club, so a club can set that or less, never more.
+- **How much a member may book** (`booking.limit`), one of:
+  - `{ "kind": "none" }`: no limit (Pastime);
+  - `{ "kind": "upcoming", "max": 4 }`: at most 4 bookings that haven't ended yet;
+  - `{ "kind": "hours_per_week", "hours": 6 }`: at most 6 hours booked in any 7 days in a
+    row.
+
+  The site checks it in the same step that saves the booking, so two quick taps can't both
+  get past it. Admin bookings and leagues never count. Pages and messages word it for you
+  ("You can have as many bookings as you like"), and the rules can use `{booking_limit}`.
 - **Rules**: written once, with placeholders such as `{cancel_cutoff}` filled in from the
   limits, so the rules can never disagree with what the site enforces. They show on the
   Rules page and before every booking.
@@ -419,7 +428,8 @@ Turnstile while the alarm is on.
 > **4. Add it to your calendar.** Tap **Add to calendar** to get a reminder 1 hour before.
 >
 > **Good to know**
-> - You can have up to **2 upcoming bookings** at a time.
+> - **How many:** you can have as many bookings as you like, up to 30 days ahead and up to
+>   2 hours each. *(Other clubs: use the limit from your settings.)*
 > - **Cancelling:** go to **My bookings** and tap **Cancel booking**. You can cancel up to
 >   **24 hours** before the start. After that, the booking can't be cancelled. If you can't
 >   make it, please let management know.

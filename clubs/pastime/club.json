@@ -34,7 +34,7 @@
   ],
   "booking": {
     "max_length_minutes": 120,
-    "max_upcoming": 2,
+    "limit": { "kind": "none" },
     "days_ahead": 30,
     "cancel_cutoff_hours": 24,
     "suspension_months": 6,

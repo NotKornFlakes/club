@@ -58,7 +58,7 @@ describe("local seed data", () => {
     expect(counts).toMatchObject({
       resources: CLUB.starting_resources.length,
       hours: CLUB.starting_resources.length * 7,
-      bookings: 5,
+      bookings: 7,
       events: 2,
       no_shows: 2,
       suspensions: 1,
@@ -83,6 +83,11 @@ describe("local seed data", () => {
       // About 13 weeks in a 3-month season (today's may already have passed).
       expect(Number(n?.n), String(row.name)).toBeGreaterThanOrEqual(12);
     }
+  });
+
+  it("gives member 1001 three upcoming bookings (Pastime has no limit)", async () => {
+    const row = await db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE member_id = 1 AND status = 'active' AND ends_at > ?").bind(NOW).first();
+    expect(row?.n).toBe(3);
   });
 
   it("can be applied twice (it resets the data first)", async () => {
