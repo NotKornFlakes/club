@@ -1,7 +1,7 @@
 // @ts-check
 // Test data for YOUR COMPUTER ONLY: 5 fake members with known PINs, 1 test admin, the
-// club's starting courts and rooms (from its settings file), two league seasons, a few
-// bookings and club events.
+// club's starting courts, lanes and rooms (from its settings file), four programs and two
+// leagues in the gym, a few bookings and club events.
 //
 // scripts/seed.mjs applies it with `wrangler d1 execute --local`; it never touches the
 // live database. Even if these rows somehow reached it, none of the logins would work:
@@ -29,10 +29,20 @@ export const SEED_ADMIN = Object.freeze({
   totpSecret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
 });
 
-/** Two made-up league seasons in the first room on the club's list (the gymnasium). */
+/**
+ * Made-up seasons in the gym. Programs are public: the week view shows them by name.
+ * Lengths are placeholders (2 hours) until the club confirms them.
+ */
+export const SEED_PROGRAMS = Object.freeze([
+  { name: "Pickleball", weekdays: [1, 2, 3, 4, 5], starts: "11:00", ends: "13:00" },
+  { name: "Open gym", weekdays: [1, 2, 3, 4, 5], starts: "15:00", ends: "17:00" },
+  { name: "Ping Pong", weekdays: [0], starts: "14:00", ends: "16:00" },
+  { name: "Youth", weekdays: [6], starts: "08:00", ends: "10:00" },
+]);
+/** Two made-up league seasons in the gym. Not public: the week view shows them as "Taken". */
 export const SEED_LEAGUES = Object.freeze([
-  { id: 1, name: "Monday charity basketball", weekday: 1, starts: "18:00", ends: "20:00" },
-  { id: 2, name: "Tuesday basketball league", weekday: 2, starts: "19:00", ends: "21:00" },
+  { name: "Monday charity basketball", weekdays: [1], starts: "18:00", ends: "20:00" },
+  { name: "Tuesday basketball league", weekdays: [2], starts: "19:00", ends: "21:00" },
 ]);
 /** How long the seed seasons run, from today. */
 export const SEED_SEASON_MONTHS = 3;
@@ -91,11 +101,11 @@ export async function buildSeed({ pepper, now }) {
     });
   }
 
-  // The club's starting courts and rooms, each open its starting hours every day.
-  for (const [i, name] of CLUB.starting_resources.entries()) {
+  // The club's starting courts, lanes and rooms, each open its starting hours every day.
+  for (const [i, { name, area }] of CLUB.starting_resources.entries()) {
     out.push({
-      sql: "INSERT INTO resources (id, name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-      params: [i + 1, name, i + 1, now, now],
+      sql: "INSERT INTO resources (id, name, area, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      params: [i + 1, name, area, i + 1, now, now],
     });
     for (let weekday = 0; weekday <= 6; weekday += 1) {
       out.push({
@@ -109,10 +119,45 @@ export async function buildSeed({ pepper, now }) {
   const at = (days, time) => clubTimeToUtc(addDays(today, days), time);
   const soon = nextSlot(now) + 3 * 3600; // within 24 hours, so it can't be cancelled
 
+  /** The ids of the club's starting resources in one area. @param {string} area */
+  const inArea = (area) => CLUB.starting_resources.flatMap((r, i) => (r.area === area ? [i + 1] : []));
+  const gym = inArea("gym")[0] ?? 1;
+  const lanes = inArea("bowling");
+  const rooms = inArea("rooms");
+
+  // Programs and leagues first, booked the way the admin page does it (every date of the
+  // season), so the bookings below are placed around them.
+  const seasonLast = addMonths(today, SEED_SEASON_MONTHS);
+  let leagueId = 0;
+  let leagueBookingId = 100;
+  for (const [group, isPublic] of /** @type {const} */ ([[SEED_PROGRAMS, 1], [SEED_LEAGUES, 0]])) {
+    for (const season of group) {
+      for (const weekday of season.weekdays) {
+        leagueId += 1;
+        out.push({
+          sql: `INSERT INTO leagues (id, name, resource_id, weekday, starts_local, ends_local, first_date, last_date, public, created_by_admin_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          params: [leagueId, season.name, gym, weekday, season.starts, season.ends, today, seasonLast, isPublic, SEED_ADMIN.id, now],
+        });
+        const dates = seasonDates({ ...season, weekday, resourceId: gym, first: today, last: seasonLast, renewedFrom: null, isPublic: isPublic === 1 });
+        for (const d of dates.filter((day) => day.start > now)) {
+          leagueBookingId += 1;
+          out.push({
+            sql: `INSERT INTO bookings (id, resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
+                  VALUES (?, ?, 'league', ?, ?, ?, ?, ?, ?)`,
+            params: [leagueBookingId, gym, leagueId, season.name, d.start, d.end, now, SEED_ADMIN.id],
+          });
+        }
+      }
+    }
+  }
+
+  // Member bookings at times no program or league uses (rooms, a lane, and 9-10 p.m. in the gym).
   const memberBookings = [
-    { id: 1, member: 1, resource: 1, start: soon, end: soon + 3600 },
-    { id: 2, member: 5, resource: 1, start: at(1, "18:00"), end: at(1, "19:00") },
-    { id: 3, member: 3, resource: 2, start: at(2, "10:00"), end: at(2, "11:30") },
+    { id: 1, member: 1, resource: rooms[0] ?? gym, start: soon, end: soon + 3600 },
+    { id: 2, member: 5, resource: gym, start: at(1, "21:00"), end: at(1, "22:00") },
+    { id: 3, member: 3, resource: rooms[1] ?? rooms[0] ?? gym, start: at(2, "10:00"), end: at(2, "11:30") },
+    { id: 5, member: 2, resource: lanes[2] ?? gym, start: at(3, "19:00"), end: at(3, "20:00") },
   ];
   for (const b of memberBookings) {
     out.push({
@@ -121,42 +166,12 @@ export async function buildSeed({ pepper, now }) {
       params: [b.id, b.resource, b.member, b.start, b.end, now],
     });
   }
-  const maintenance = { id: 4, resource: 1, start: at(3, "09:00"), end: at(3, "12:00") };
+  const maintenance = { id: 4, resource: lanes.at(-1) ?? gym, start: at(3, "09:00"), end: at(3, "12:00") };
   out.push({
     sql: `INSERT INTO bookings (id, resource_id, kind, label, starts_at, ends_at, created_at, created_by_admin_id)
-          VALUES (?, ?, 'admin', 'Floor maintenance', ?, ?, ?, ?)`,
+          VALUES (?, ?, 'admin', 'Lane maintenance', ?, ?, ?, ?)`,
     params: [maintenance.id, maintenance.resource, maintenance.start, maintenance.end, now, SEED_ADMIN.id],
   });
-
-  // Two league seasons, booked the way the admin page does it: every free date, and any
-  // date that clashes with a booking above is skipped and listed for the admin.
-  const taken = [...memberBookings, maintenance];
-  const seasonLast = addMonths(today, SEED_SEASON_MONTHS);
-  let leagueBookingId = 100;
-  for (const league of SEED_LEAGUES) {
-    out.push({
-      sql: `INSERT INTO leagues (id, name, resource_id, weekday, starts_local, ends_local, first_date, last_date, created_by_admin_id, created_at)
-            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
-      params: [league.id, league.name, league.weekday, league.starts, league.ends, today, seasonLast, SEED_ADMIN.id, now],
-    });
-    const season = { ...league, resourceId: 1, first: today, last: seasonLast, renewedFrom: null };
-    for (const d of seasonDates(season).filter((day) => day.start > now)) {
-      const clash = taken.find((b) => b.resource === 1 && b.start < d.end && d.start < b.end);
-      if (clash) {
-        out.push({
-          sql: "INSERT INTO league_skips (league_id, on_date, clashing_booking_id) VALUES (?, ?, ?)",
-          params: [league.id, d.date, clash.id],
-        });
-        continue;
-      }
-      leagueBookingId += 1;
-      out.push({
-        sql: `INSERT INTO bookings (id, resource_id, kind, league_id, label, starts_at, ends_at, created_at, created_by_admin_id)
-              VALUES (?, 1, 'league', ?, ?, ?, ?, ?, ?)`,
-        params: [leagueBookingId, league.id, league.name, d.start, d.end, now, SEED_ADMIN.id],
-      });
-    }
-  }
 
   // Member 1003 has two no-shows on record; member 1004 is suspended (so has no bookings).
   for (const [days, note] of [[-20, "Court booked, nobody came."], [-75, null]]) {

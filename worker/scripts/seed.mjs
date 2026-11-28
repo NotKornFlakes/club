@@ -1,6 +1,7 @@
 // @ts-check
 // Resets the LOCAL database (worker/.wrangler) to known test data: 5 fake members, 1 test
-// admin, the club's starting rooms and hours, two league seasons, a few bookings and events.
+// admin, the club's starting courts, lanes and rooms, four programs and two leagues, a few
+// bookings and events.
 //
 // It can't reach the live database: seedCommands() (scripts/seed-data.js, tested in
 // test/seed.test.js) refuses any option, CLOUDFLARE_ENV, or a wrangler.json that isn't the
@@ -11,7 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ensureDevVars } from "./dev-vars.mjs";
-import { SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
+import { SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "./seed-data.js";
 
 const workerDir = new URL("..", import.meta.url);
 const wrangler = new URL("../node_modules/.bin/wrangler", import.meta.url).pathname;
@@ -48,5 +49,5 @@ console.log("\nLocal test data is ready. Start the site with: npm run dev\n");
 console.log("Members (member number / PIN):");
 for (const m of SEED_MEMBERS) console.log(`  ${m.number} / ${m.pin}`);
 console.log(`\nAdmin: username "${SEED_ADMIN.username}", password "${SEED_ADMIN.password}".`);
-console.log(`Leagues: ${SEED_LEAGUES.map((l) => l.name).join(", ")}.`);
+console.log(`Programs: ${SEED_PROGRAMS.map((p) => p.name).join(", ")}. Leagues: ${SEED_LEAGUES.map((l) => l.name).join(", ")}.`);
 console.log("For the 6-digit code, run: npm run totp");

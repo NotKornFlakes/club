@@ -13,6 +13,7 @@ beforeAll(async () => {
   const admin = await loginAdmin(await makeAdmin());
   const list = [
     ["/", null],
+    ...["/week", "/bowling", "/athletics", "/banquets", "/history", "/photos", "/contact"].map((p) => [p, null]),
     ["/rules", null],
     ["/login", null],
     ["/no-such-page", null],
@@ -43,7 +44,7 @@ describe("every page", () => {
   it("has a skip link to the main content", () => {
     for (const [path, html] of Object.entries(pages)) {
       expect(html, path).toContain('<a class="skip-link" href="#main">Skip to main content</a>');
-      expect(html, path).toContain('<main id="main">');
+      expect(html, path).toMatch(/<main id="main"[ >]/);
     }
   });
 
@@ -103,7 +104,7 @@ describe("colour contrast (WCAG AA)", () => {
     // The site's colours, with the club's own colours (/club.css, loaded after) on top.
     const site = read(await (await get("/styles.css")).text());
     const club = read(await (await get("/club.css")).text());
-    expect(Object.keys(club.light).sort()).toEqual(["accent", "accent-text"]);
+    expect(Object.keys(club.light).sort()).toEqual(["accent", "accent-text", "brand-bg", "brand-highlight", "brand-text"]);
     schemes.light = { ...site.light, ...club.light };
     schemes.dark = { ...site.light, ...site.dark, ...club.light, ...club.dark };
   });
@@ -123,6 +124,13 @@ describe("colour contrast (WCAG AA)", () => {
     ["accent", "info-bg", 4.5],
     ["border", "bg", 3],
     ["accent", "bg", 3],
+    // The club's header and footer, cards and week view.
+    ["brand-text", "brand-bg", 4.5],
+    ["brand-highlight", "brand-bg", 4.5],
+    ["text", "surface", 4.5],
+    ["muted", "surface", 4.5],
+    ["accent", "surface", 4.5],
+    ...["gold", "blue", "green", "rose", "lilac", "teal"].map((c) => ["program-text", `program-${c}`, 4.5]),
   ];
 
   it.each(["light", "dark"])("passes in %s mode", (scheme) => {

@@ -23,3 +23,10 @@ crash.log
 .DS_Store
 .vscode/
 .idea/
+
+# The club's draft text and photos from its current site: LOCAL DEMO ONLY.
+# Never commit them until the club gives permission (see README, "Club content").
+clubs/*/drafts/
+# Made from clubs/<club>/ by `npm run content` (scripts/club-content.mjs).
+worker/src/generated/
+worker/public/club-photos/

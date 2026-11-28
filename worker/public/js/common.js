@@ -36,6 +36,19 @@ export function me() {
   return mePromise;
 }
 
+/**
+ * Who's logged in, without sending anyone to the login page: for public pages that also
+ * work logged out (This Week). Null when nobody is logged in.
+ * @returns {Promise<Record<string, any> | null>}
+ */
+export async function sessionOrNull() {
+  const response = await fetch(mePath, { headers: { Accept: "application/json" }, credentials: "same-origin" });
+  if (!response.ok) return null;
+  const data = await response.json();
+  mePromise = Promise.resolve(data);
+  return data;
+}
+
 /** Forget the cached /me answer (after a change it reports). */
 export function refreshMe() {
   mePromise = null;

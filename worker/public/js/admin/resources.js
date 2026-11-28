@@ -20,11 +20,21 @@ function parseHours(text, weekday) {
     });
 }
 
+/** A select of the club's areas. @param {string} id @param {string} current */
+function areaSelect(id, current) {
+  const select = /** @type {HTMLSelectElement} */ (el("select", { id }));
+  if (!CLUB.areas.some((a) => a.id === current)) select.append(el("option", { value: "", text: "Not placed yet: choose an area" }));
+  for (const a of CLUB.areas) select.append(el("option", { value: a.id, text: a.name }));
+  select.value = CLUB.areas.some((a) => a.id === current) ? current : "";
+  return select;
+}
+
 /** @param {any} r */
 function resourceCard(r) {
   const nameId = `name-${r.id}`;
   const orderId = `order-${r.id}`;
   const activeId = `active-${r.id}`;
+  const areaId = `area-${r.id}`;
   const dayInputs = DAYS.map((day, weekday) => {
     const value = r.hours.filter((/** @type {{ weekday: number }} */ h) => h.weekday === weekday).map((/** @type {{ opens: string, closes: string }} */ h) => `${h.opens}-${h.closes}`).join(", ");
     return { weekday, input: /** @type {HTMLInputElement} */ (el("input", { id: `h-${r.id}-${weekday}`, value, placeholder: "Closed" })), day };
@@ -34,8 +44,9 @@ function resourceCard(r) {
       const name = /** @type {HTMLInputElement} */ (byId(nameId)).value.trim();
       const order = Number(/** @type {HTMLInputElement} */ (byId(orderId)).value || 0);
       const active = /** @type {HTMLInputElement} */ (byId(activeId)).checked;
+      const area = /** @type {HTMLSelectElement} */ (byId(areaId)).value;
       const hours = dayInputs.flatMap((d) => parseHours(d.input.value, d.weekday));
-      await api(`/api/admin/resources/${r.id}/update`, { method: "POST", body: { name, active, sort_order: order } });
+      await api(`/api/admin/resources/${r.id}/update`, { method: "POST", body: { name, active, sort_order: order, ...(area ? { area } : {}) } });
       await api(`/api/admin/resources/${r.id}/hours`, { method: "POST", body: { hours } });
       showOk(`${name} saved.`);
       await load();
@@ -50,6 +61,8 @@ function resourceCard(r) {
     el("h2", { text: r.active ? r.name : `${r.name} (retired: members can't see it)` }),
     el("label", { for: nameId, text: "Name" }),
     el("input", { id: nameId, value: r.name, maxlength: 60 }),
+    el("label", { for: areaId, text: "Area (where it shows in the week view)" }),
+    areaSelect(areaId, r.area),
     el("label", { for: orderId, text: "Order in lists (lower comes first)" }),
     el("input", { id: orderId, type: "number", value: r.sort_order, min: -1000, max: 1000 }),
     el("div", { className: "agree" }, [el("input", { type: "checkbox", id: activeId, checked: r.active }), el("label", { for: activeId, text: "Members can book it" })]),
@@ -65,7 +78,8 @@ async function load() {
   byId("resources").replaceChildren(...resources.map(resourceCard));
 }
 
-byId("starting-names").textContent = CLUB.starting_resources.join(", ");
+byId("new-area").replaceChildren(...CLUB.areas.map((a) => el("option", { value: a.id, text: a.name })));
+byId("starting-names").textContent = CLUB.starting_resources.map((r) => r.name).join(", ");
 byId("starting-hours").textContent = `${CLUB.starting_hours.opens} to ${CLUB.starting_hours.closes}`;
 byId("starting-button").addEventListener("click", async () => {
   try {
@@ -81,7 +95,8 @@ byId("new-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     const name = /** @type {HTMLInputElement} */ (byId("new-name")).value.trim();
-    await api("/api/admin/resources", { method: "POST", body: { name } });
+    const area = /** @type {HTMLSelectElement} */ (byId("new-area")).value;
+    await api("/api/admin/resources", { method: "POST", body: { name, area } });
     showOk(`${name} added. Now set its opening hours.`);
     /** @type {HTMLFormElement} */ (byId("new-form")).reset();
     await load();

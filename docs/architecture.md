@@ -91,7 +91,8 @@ What happens on every request:
 CLAUDE.md                 brief (source of truth)
 README.md                 setup, admin how-tos, threat model, "How to book" guide
 docs/architecture.md      this document
-clubs/pastime/club.json   the club's settings: name, rooms, hours, limits, rules, colors
+clubs/pastime/club.json   the club's settings: name, contact, areas, rooms, limits, rules, colors
+clubs/pastime/pages/      the club's page text (placeholders); drafts/ is local only, gitignored
 infra/                    Terraform: Worker, D1, cron, Turnstile, workers.dev route
 worker/
   src/                    Worker code (plain JavaScript modules)
@@ -124,6 +125,22 @@ worker/
   settings for the page scripts). No inline scripts, so the CSP doesn't change. Resources
   and hours in the file are a starting list, loaded once into an empty site from the admin
   page; after that the admin pages own them. The README explains each setting.
+- **The whole club website (built 2026-11-28; `docs/full-site-plan.md`, steps 2 to 4).** The
+  Worker fills a shared header (crest, menu) and footer (contact details) into every public
+  and member page. The content pages take their text from `clubs/<club>/pages/`, which
+  `npm run content` gathers into a generated JSON file. Only an allowed list of plain tags
+  gets through, checked by `src/club-content-check.js` at build time and again at start-up.
+  Drafts from the club's old site sit in `clubs/<club>/drafts/` (gitignored, local demo
+  only).
+  - **The week view:** `GET /api/week` (public and read-only, `src/week.js`) returns seven
+    days of 15-minute slots for one area. Each slot is one character: free, taken, closed,
+    past, later, or a program letter. It never includes members, admin labels or private
+    league names. `public/js/week.js` draws it: seven columns on wide screens, one swipeable
+    day with tabs on phones, and a booking sheet in a `<dialog>`. Positions are set through
+    CSSOM, which the strict CSP allows. Bookings still go through `POST /api/bookings` and
+    every server and database check.
+  - **Migration `0002`:** `resources.area` (the area id from the club's settings) and
+    `leagues.public` (a program, shown by name). Both are additive, with defaults.
 - **Bundling.** Terraform's `content_file` takes one file, so CI runs
   `wrangler deploy --dry-run --outdir dist` to bundle `src/` into one file. Terraform
   uploads that file. Terraform owns the Worker; `wrangler deploy` is never run for real.

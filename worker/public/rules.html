@@ -7,17 +7,18 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/club.css">
+  <script src="/js/early.js"></script>
+  <script type="module" src="/js/site.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
+  <header data-site-header></header>
   <main id="main">
     <h1>Booking Rules</h1>
     <!-- The rules come from the club's settings file, filled in as the page is served. -->
     <ul class="rules" data-club-rules></ul>
     <p><a class="button" href="/">Back to home</a></p>
   </main>
-  <footer>
-    <a href="/rules">Booking rules</a>
-  </footer>
+  <footer data-site-footer></footer>
 </body>
 </html>

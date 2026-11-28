@@ -25,9 +25,11 @@
   </header>
   <div id="alarm-banner" class="alarm-banner" role="alert" hidden></div>
   <main id="main">
-    <h1>Leagues</h1>
+    <h1>Leagues and programs</h1>
     <p class="lead">A league books the same time every week for one season (at most 12 months).
-      Dates that clash with an existing booking are skipped and listed.</p>
+      Dates that clash with an existing booking are skipped and listed. Tick "Show on This Week"
+      to make it a program: members and visitors then see its name in the week view, not just
+      "Taken". For a program on several days (Monday to Friday), add one season per day.</p>
     <p id="message" class="message" role="alert" tabindex="-1" hidden></p>
     <section id="result" class="card" hidden aria-live="polite"></section>
     <h2>Seasons</h2>
@@ -50,6 +52,10 @@
           <div><label for="ends">End time</label><input id="ends" type="time" step="900" required></div>
           <div><label for="first">First date</label><input id="first" type="date" required></div>
           <div><label for="last">Last date</label><input id="last" type="date" required></div>
+        </div>
+        <div class="agree">
+          <input id="public" type="checkbox">
+          <label for="public">Show on This Week with its name (a program)</label>
         </div>
         <button type="submit" class="button">Create season</button>
       </form>

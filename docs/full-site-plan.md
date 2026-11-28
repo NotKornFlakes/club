@@ -1,6 +1,9 @@
 # Plan: the club's whole website
 
-Status: **plan only. Nothing here is built.** Scope changed on 2026-11-28: this project now
+Status: **plan only. Nothing here is built.** Decisions agreed 2026-11-28 (section 11).
+Step 0 is done (#16, #17). Steps 2, 3 and 4 were built early, as a demo for the club. The
+others wait until the owner has met the club.
+Scope changed on 2026-11-28: this project now
 replaces the club's whole Weebly site, not just booking. `CLAUDE.md` has the requirements;
 this document says how we'd meet them, the build steps, and what we need from the club.
 
@@ -109,7 +112,7 @@ Everything already built carries over.
     - Sent emails show as "dropped" in the Email Routing summary even when they arrive.
     - It needs the DNS on Cloudflare, so the form can only go live after the DNS move.
   - If that turns out to be unsuitable, the fallback is to show the club's email address
-    instead of a form.
+    instead of a form (agreed).
 
 ## 5. Courts, rooms and bowling lanes
 
@@ -139,9 +142,17 @@ Everything already built carries over.
 
 **Rules and how it's built:**
 
-- **Recommended: editors see member bookings only as "Member booking",** with no name or
-  number. They can't cancel members' bookings. When a program clashes, they see the clash
-  list without names and ask the admin.
+- **Editors see member bookings only as "Member booking",** with no name or number, ever.
+- **Editors may cancel a member booking, with a required reason** (decided 2026-11-28):
+  - The cancellation and the reason go in the audit log, under the editor's name.
+  - The slot is freed, the same as when an admin cancels.
+  - The member sees a notice on "My bookings" that the club cancelled the booking.
+  - To settle in the editor PR, with my recommendations:
+    - Should the notice show the reason, or a fixed message such as "Cancelled by the
+      club. Please contact management"? Recommended: the fixed message. Reasons are
+      written for the audit log and may not suit the member.
+    - Should a booking an admin cancels get the same notice? Recommended: yes.
+  - When a program clashes, editors see the clash list without names.
 - **Login:** the same as admins: a long password, an authenticator code, 12-hour sessions
   and their own lockouts. The admin creates the editor account, with a one-time password
   and key, and can reset or disable it. Editors never use the setup token. How many editors
@@ -184,7 +195,7 @@ Everything already built carries over.
 The current build order ends with hardening, then the per-club config, then the custom
 domain. The new order, one PR each:
 
-0. **Get the stacked PRs onto `main`.**
+0. **Get the stacked PRs onto `main`** (PR #16).
    - #7–#12 and #14 were each merged into their parent branch after that parent had already
      been merged, so their code isn't on `main`.
    - One PR brings them all over.
@@ -255,20 +266,23 @@ domain. The new order, one PR each:
       after launch;
     - whether the club pays for Weebly, so the plan can be cancelled after launch.
 
-## 11. Decisions for the owner (each with a recommendation)
+## 11. Decisions (agreed 2026-11-28)
 
-1. **Fold leagues into programs.** Recommended: yes.
-2. **Editors see member bookings without names and can't cancel them.** Recommended: yes.
-3. **Inquiries are emailed, never stored.** Recommended: yes.
+All seven are agreed as recommended, except number 2, which changed.
+
+1. **Fold leagues into programs.** Agreed.
+2. **Editors and member bookings.** Changed: editors never see names, but they *may* cancel
+   a member booking with a required reason. It's logged in the audit log, and the member
+   sees a notice (section 6).
+3. **Inquiries are emailed, never stored.** Agreed.
 4. **Send email through Cloudflare Email Service,** from a sending subdomain, to one
-   verified club inbox. Recommended: yes, with the beta caveat. The fallback is showing the
-   club's email address.
-5. **Photos as static files for launch,** with an upload feature later if wanted.
-   Recommended: yes.
+   verified club inbox. Agreed, with the beta caveat and the fallback of showing the club's
+   email address.
+5. **Photos as static files for launch,** with an upload feature later if wanted. Agreed.
 6. **The bare domain is the main address, `www` redirects to it, and no `book.` address.**
-   Recommended: yes.
+   Agreed.
 7. **Page text as small HTML files in `clubs/pastime/pages/`,** changed by PR. Editors don't
-   edit page text, at least at first. Recommended: yes.
+   edit page text, at least at first. Agreed.
 
 ## 12. Sources
 

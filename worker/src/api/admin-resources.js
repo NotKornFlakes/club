@@ -16,7 +16,7 @@ const adminId = (ctx) => /** @type {import("../sessions.js").AdminSession} */ (c
 
 /** @param {Ctx} ctx */
 async function listResources(ctx) {
-  const { results } = await ctx.env.DB.prepare("SELECT id, name, active, sort_order FROM resources ORDER BY sort_order, name").all();
+  const { results } = await ctx.env.DB.prepare("SELECT id, name, area, active, sort_order FROM resources ORDER BY sort_order, name").all();
   const hours = await ctx.env.DB.prepare(
     "SELECT resource_id, weekday, opens_local, closes_local FROM opening_hours ORDER BY weekday, opens_local",
   ).all();
@@ -24,6 +24,7 @@ async function listResources(ctx) {
     resources: results.map((r) => ({
       id: Number(r.id),
       name: String(r.name),
+      area: String(r.area),
       active: r.active === 1,
       sort_order: Number(r.sort_order),
       hours: hours.results
@@ -36,22 +37,35 @@ async function listResources(ctx) {
 /** @param {Record<string, unknown>} body */
 const resourceName = (body) => str(body, "name", { max: 60, label: "the name" });
 
+/**
+ * The area (from the club's settings) a court or room goes in; `fallback` when not given.
+ * @param {Record<string, unknown>} body @param {string} fallback
+ */
+function resourceArea(body, fallback) {
+  if (body.area === undefined) return fallback;
+  const area = str(body, "area", { max: 20, label: "the area" });
+  if (!CLUB.areas.some((a) => a.id === area)) throw new HttpError(400, "bad_input", "Please choose one of the club's areas.");
+  return area;
+}
+
 /** @param {Ctx} ctx */
 async function createResource(ctx) {
-  onlyFields(ctx.body, ["name", "sort_order"]);
+  onlyFields(ctx.body, ["name", "sort_order", "area"]);
   const name = resourceName(ctx.body);
+  const area = resourceArea(ctx.body, CLUB.areas[0]?.id ?? "");
   const sort = ctx.body.sort_order === undefined ? 0 : int(ctx.body, "sort_order", { min: -1000, max: 1000, label: "the order" });
   const clash = await ctx.env.DB.prepare("SELECT id FROM resources WHERE name = ?").bind(name).first();
   if (clash) throw new HttpError(409, "exists", "There's already a court or room with that name.");
   const [created] = /** @type {D1Result<Record<string, unknown>>[]} */ (
     await ctx.env.DB.batch([
-      ctx.env.DB.prepare("INSERT INTO resources (name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?) RETURNING id").bind(
+      ctx.env.DB.prepare("INSERT INTO resources (name, area, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?) RETURNING id").bind(
         name,
+        area,
         sort,
         ctx.now,
         ctx.now,
       ),
-      auditEntry(ctx.env.DB, { at: ctx.now, adminId: adminId(ctx), action: "resource.create", target: `resource:${name}` }),
+      auditEntry(ctx.env.DB, { at: ctx.now, adminId: adminId(ctx), action: "resource.create", target: `resource:${name}`, details: { area } }),
     ])
   );
   return json({ id: Number(created?.results[0]?.id) }, 201);
@@ -59,19 +73,20 @@ async function createResource(ctx) {
 
 /** Rename, reorder, or retire / bring back. Resources are never deleted (bookings point at them). @param {Ctx} ctx */
 async function updateResource(ctx) {
-  onlyFields(ctx.body, ["name", "active", "sort_order"]);
+  onlyFields(ctx.body, ["name", "active", "sort_order", "area"]);
   const id = idParam(ctx.params[0]);
   const name = resourceName(ctx.body);
   const active = bool(ctx.body, "active");
   const sort = int(ctx.body, "sort_order", { min: -1000, max: 1000, label: "the order" });
-  if (!(await ctx.env.DB.prepare("SELECT id FROM resources WHERE id = ?").bind(id).first())) {
-    throw new HttpError(404, "not_found", "We couldn't find that court or room.");
-  }
+  const existing = await ctx.env.DB.prepare("SELECT area FROM resources WHERE id = ?").bind(id).first();
+  if (!existing) throw new HttpError(404, "not_found", "We couldn't find that court or room.");
+  const area = resourceArea(ctx.body, String(existing.area));
   const clash = await ctx.env.DB.prepare("SELECT id FROM resources WHERE name = ? AND id <> ?").bind(name, id).first();
   if (clash) throw new HttpError(409, "exists", "There's already a court or room with that name.");
   await ctx.env.DB.batch([
-      ctx.env.DB.prepare("UPDATE resources SET name = ?, active = ?, sort_order = ?, updated_at = ? WHERE id = ?").bind(
+      ctx.env.DB.prepare("UPDATE resources SET name = ?, area = ?, active = ?, sort_order = ?, updated_at = ? WHERE id = ?").bind(
         name,
+        area,
         active ? 1 : 0,
         sort,
         ctx.now,
@@ -82,7 +97,7 @@ async function updateResource(ctx) {
         adminId: adminId(ctx),
         action: "resource.update",
         target: `resource:${id}`,
-        details: { name, active, sort_order: sort },
+        details: { name, area, active, sort_order: sort },
       }),
   ]);
   return json({ ok: true });
@@ -153,8 +168,10 @@ async function loadStartingList(ctx) {
   const { opens, closes } = CLUB.starting_hours;
   try {
     await db.batch([
-      ...CLUB.starting_resources.flatMap((name, i) => [
-        db.prepare("INSERT INTO resources (name, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?)").bind(name, i + 1, ctx.now, ctx.now),
+      ...CLUB.starting_resources.flatMap(({ name, area }, i) => [
+        db
+          .prepare("INSERT INTO resources (name, area, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(name, area, i + 1, ctx.now, ctx.now),
         ...WEEKDAYS.map((weekday) =>
           db
             .prepare("INSERT INTO opening_hours (resource_id, weekday, opens_local, closes_local) SELECT id, ?, ?, ? FROM resources WHERE name = ?")
@@ -165,7 +182,7 @@ async function loadStartingList(ctx) {
         at: ctx.now,
         adminId: adminId(ctx),
         action: "resource.starting_list",
-        details: { resources: CLUB.starting_resources, opens, closes },
+        details: { resources: CLUB.starting_resources.map((r) => r.name), opens, closes },
       }),
     ]);
   } catch (error) {

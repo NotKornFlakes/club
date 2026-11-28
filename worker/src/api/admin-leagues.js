@@ -1,18 +1,19 @@
 // @ts-check
-// Admin: leagues. A league is one season: one resource, one weekday, a start and end time,
-// and a first and last date at most 12 months out. Creating it books every free date in
+// Admin: leagues and programs. A league is one season: one resource, one weekday, a start and
+// end time, and a first and last date at most 12 months out. A league marked public is a
+// program: the week view shows it with its name (otherwise just "Taken"). Creating it books every free date in
 // one batch; dates that clash with an existing booking are skipped and listed for the admin.
 // See docs/architecture.md, section 6 "Leagues".
 
 import { auditEntry } from "../audit.js";
 import { HttpError, json } from "../http.js";
 import { addDays, addMonths, clubTimeToUtc, clubToday, weekdayOf } from "../time.js";
-import { date, idParam, int, onlyFields, quarterTime, str } from "../validate.js";
+import { bool, date, idParam, int, onlyFields, quarterTime, str } from "../validate.js";
 import { bookedBy } from "./admin-schedule.js";
 
 /** @typedef {import("../router.js").Ctx} Ctx */
 /** @typedef {import("../router.js").Route} Route */
-/** @typedef {{ name: string, resourceId: number, weekday: number, starts: string, ends: string, first: string, last: string, renewedFrom: number | null }} Season */
+/** @typedef {{ name: string, resourceId: number, weekday: number, starts: string, ends: string, first: string, last: string, renewedFrom: number | null, isPublic: boolean }} Season */
 
 /** @param {Ctx} ctx */
 const adminId = (ctx) => /** @type {import("../sessions.js").AdminSession} */ (ctx.admin).adminId;
@@ -55,10 +56,10 @@ async function createSeason(ctx, season) {
   if (dates.length === 0) throw new HttpError(400, "bad_input", `There's no ${WEEKDAYS[season.weekday]} in those dates.`);
 
   const league = await env.DB.prepare(
-    `INSERT INTO leagues (name, resource_id, weekday, starts_local, ends_local, first_date, last_date, renewed_from, created_by_admin_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    `INSERT INTO leagues (name, resource_id, weekday, starts_local, ends_local, first_date, last_date, renewed_from, public, created_by_admin_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
   )
-    .bind(season.name, season.resourceId, season.weekday, season.starts, season.ends, season.first, season.last, season.renewedFrom, adminId(ctx), now)
+    .bind(season.name, season.resourceId, season.weekday, season.starts, season.ends, season.first, season.last, season.renewedFrom, season.isPublic ? 1 : 0, adminId(ctx), now)
     .first();
   const leagueId = Number(league?.id);
 
@@ -104,6 +105,7 @@ async function createSeason(ctx, season) {
             resource: String(resource.name),
             first_date: season.first,
             last_date: season.last,
+            public: season.isPublic,
             booked: free.length,
             skipped: clashes.map((c) => c.date),
           },
@@ -132,7 +134,7 @@ async function createSeason(ctx, season) {
 
 /** @param {Record<string, unknown>} body */
 function readSeason(body) {
-  onlyFields(body, ["name", "resource_id", "weekday", "starts_local", "ends_local", "first_date", "last_date"]);
+  onlyFields(body, ["name", "resource_id", "weekday", "starts_local", "ends_local", "first_date", "last_date", "public"]);
   return {
     name: str(body, "name", { max: 80, label: "the league name" }),
     resourceId: int(body, "resource_id", { min: 1, max: Number.MAX_SAFE_INTEGER, label: "the place" }),
@@ -142,6 +144,8 @@ function readSeason(body) {
     first: date(body, "first_date", "the first date"),
     last: date(body, "last_date", "the last date"),
     renewedFrom: null,
+    // Public = a program: shown with its name on This Week and Book.
+    isPublic: body.public === undefined ? false : bool(body, "public"),
   };
 }
 
@@ -175,6 +179,7 @@ async function renewLeague(ctx) {
     first: afterOld > today ? afterOld : today,
     last: date(ctx.body, "last_date", "the new last date"),
     renewedFrom: Number(old.id),
+    isPublic: Number(old.public) === 1,
   });
 }
 
@@ -198,7 +203,7 @@ async function cancelLeague(ctx) {
 /** @param {Ctx} ctx */
 async function listLeagues(ctx) {
   const { results } = await ctx.env.DB.prepare(
-    `SELECT l.id, l.name, l.weekday, l.starts_local, l.ends_local, l.first_date, l.last_date, l.cancelled_at, l.renewed_from,
+    `SELECT l.id, l.name, l.weekday, l.starts_local, l.ends_local, l.first_date, l.last_date, l.cancelled_at, l.renewed_from, l.public,
             r.name AS resource,
             (SELECT COUNT(*) FROM bookings b WHERE b.league_id = l.id AND b.status = 'active') AS booked,
             (SELECT COUNT(*) FROM league_skips k WHERE k.league_id = l.id) AS skipped,
@@ -218,6 +223,7 @@ async function listLeagues(ctx) {
       ends_local: String(l.ends_local),
       first_date: String(l.first_date),
       last_date: String(l.last_date),
+      public: Number(l.public) === 1,
       cancelled: l.cancelled_at !== null,
       renewed: Number(l.renewed) > 0,
       ended: String(l.last_date) < today,

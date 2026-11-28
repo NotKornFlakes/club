@@ -5,6 +5,8 @@ import { exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import raw from "../../clubs/pastime/club.json" with { type: "json" };
 import { CEILINGS, DEFAULT_MAX_ADMINS, ClubConfigError, parseClub, publicClub } from "../src/club-config.js";
+import { CONTENT } from "../src/club-content.js";
+import { NAV, escapeText } from "../src/club-pages.js";
 import { CLUB } from "../src/club.js";
 import { CSP } from "../src/headers.js";
 import { ORIGIN, db, get, loginAdmin, loginMember, makeAdmin, makeMember } from "./helpers.js";
@@ -20,13 +22,25 @@ function variant(change) {
 const refused = (change) => expect(() => parseClub(variant(change))).toThrow(ClubConfigError);
 
 describe("Pastime's settings", () => {
-  it("name the club, its rooms and placeholder hours, and one admin", () => {
+  it("name the club, its contact details, areas, courts, lanes and rooms, and one admin", () => {
     expect(CLUB.name).toBe("Pastime Athletic Club");
-    expect(CLUB.address).toContain("Syracuse, NY");
+    expect(CLUB.motto).toBe("Health · Wellness · Charity · Sport");
+    expect(CLUB.since).toBe("Since 1892");
+    expect(CLUB.contact).toMatchObject({
+      address: "1314 N Salina St, Syracuse, NY 13208",
+      phone: "315-471-7929",
+      email: "pastimeathleticclub@gmail.com",
+    });
+    expect(CLUB.contact.links.map((l) => l.label)).toEqual(["Facebook", "X"]);
+    expect(CLUB.contact.map).toMatch(/^https:\/\/www\.openstreetmap\.org\//);
     expect(CLUB.time_zone).toBe("America/New_York");
     expect(CLUB.max_admins).toBe(1);
-    expect(CLUB.starting_resources).toEqual(["Gymnasium", "President's Room", "Century Room", "Lounge"]);
-    expect(CLUB.starting_hours).toEqual({ opens: "09:00", closes: "22:00" });
+    expect(CLUB.areas.map((a) => a.id)).toEqual(["gym", "bowling", "rooms"]);
+    const names = (/** @type {string} */ area) => CLUB.starting_resources.filter((r) => r.area === area).map((r) => r.name);
+    expect(names("gym")).toEqual(["Gymnasium"]);
+    expect(names("bowling")).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Lane ${n}`));
+    expect(names("rooms")).toEqual(["President's Room", "Century Room", "Lounge"]);
+    expect(CLUB.starting_hours).toEqual({ opens: "08:00", closes: "22:00" });
   });
 
   it("keep the brief's booking limits", () => {
@@ -52,10 +66,14 @@ describe("Pastime's settings", () => {
     expect(raw.rules.join(" ")).not.toMatch(/\d/);
   });
 
-  it("use a neutral placeholder theme and no logo", () => {
-    expect(CLUB.colors.light.accent).toBe("#4a5560");
-    expect(CLUB.colors.dark.accent).toBe("#b4bec8");
-    expect(Object.keys(raw)).not.toContain("logo");
+  it("use the club's navy and gold", () => {
+    expect(CLUB.colors.brand).toEqual({ background: "#1b2a4a", text: "#ffffff", highlight: "#e0b84a" });
+    expect(CLUB.colors.light.accent).toBe("#1b2a4a");
+    expect(CLUB.colors.dark.accent).toBe("#e3bd55");
+  });
+
+  it("never link to the old Weebly site", () => {
+    expect(JSON.stringify(raw)).not.toMatch(/weebly|blogspot|calendar\.google|https:\/\/pastimeathleticclub\.org/i);
   });
 });
 
@@ -116,9 +134,29 @@ describe("another club's settings", () => {
     expect(() => parseClub(variant((c) => (c.booking.days_ahead = 0)))).toThrow(/booking\.days_ahead/);
   });
 
+  it("refuse bad redirects", () => {
+    refused((c) => (c.redirects = { "/about.html": "https://example.org" }));
+    refused((c) => (c.redirects = { "/about.html": "//evil.example" }));
+    refused((c) => (c.redirects = { "/api/week": "/" }));
+    refused((c) => (c.redirects = { "about.html": "/" }));
+    expect(parseClub(variant((c) => delete c.redirects)).redirects).toEqual({});
+  });
+
+  it("refuse bad contact details, areas and resources", () => {
+    refused((c) => (c.contact.email = "not an email"));
+    refused((c) => (c.contact.phone = "call us"));
+    refused((c) => (c.contact.map = "http://example.org/map"));
+    refused((c) => (c.contact.links = [{ label: "Site", url: "javascript:alert(1)" }]));
+    refused((c) => (c.areas = [{ id: "Gym!", name: "Gym" }]));
+    refused((c) => (c.areas = [{ id: "gym", name: "Gym" }, { id: "gym", name: "Again" }]));
+    refused((c) => (c.starting_resources = [{ name: "Court", area: "nowhere" }]));
+    refused((c) => (c.colors.brand.highlight = "gold"));
+    refused((c) => (c.founded = 92));
+  });
+
   it("send the browser only public settings", () => {
     expect(Object.keys(publicClub(CLUB)).sort()).toEqual(
-      ["booking", "name", "phrases", "rules", "starting_hours", "starting_resources", "time_zone"].sort(),
+      ["areas", "booking", "name", "phrases", "rules", "starting_hours", "starting_resources", "time_zone"].sort(),
     );
   });
 });
@@ -131,7 +169,8 @@ describe("pages, stylesheet and script", () => {
     const member = await loginMember(await makeMember());
     const admin = await loginAdmin(await makeAdmin());
     const list = [
-      ...["/", "/rules", "/login", "/no-such-page", "/admin/login", "/admin/setup"].map((p) => [p, null]),
+      ...["/", "/week", "/bowling", "/athletics", "/banquets", "/history", "/photos", "/contact"].map((p) => [p, null]),
+      ...["/rules", "/login", "/no-such-page", "/admin/login", "/admin/setup"].map((p) => [p, null]),
       ...["/app", "/book", "/events"].map((p) => [p, member]),
       ...["/admin/", "/admin/members", "/admin/schedule", "/admin/leagues", "/admin/resources", "/admin/events", "/admin/audit"].map((p) => [p, admin]),
     ];
@@ -142,7 +181,7 @@ describe("pages, stylesheet and script", () => {
   });
 
   it("every page has the club's name in its title, its colours, and nothing left to fill", () => {
-    expect(Object.keys(pages)).toHaveLength(16);
+    expect(Object.keys(pages)).toHaveLength(23);
     for (const [path, html] of Object.entries(pages)) {
       expect(html, path).toMatch(/<title>[^<]+ – Pastime Athletic Club<\/title>/);
       expect(html, path).toContain('<link rel="stylesheet" href="/club.css">');
@@ -150,13 +189,55 @@ describe("pages, stylesheet and script", () => {
     }
   });
 
-  it("the home page shows the club, its contact details and a link to its main website", () => {
+  it("the home page shows the club's name, motto and year, and the way to This Week and Book", () => {
     const home = pages["/"] ?? "";
-    expect(home).toContain("<h1>Pastime Athletic Club</h1>");
-    expect(home).toContain(CLUB.intro);
-    expect(home).toContain(CLUB.address);
-    expect(home).toContain(CLUB.contact);
-    expect(home).toContain('<a href="https://pastimeathleticclub.org">');
+    expect(home).toContain('<h1 id="club-name">Pastime Athletic Club</h1>');
+    expect(home).toContain(">Since 1892<");
+    expect(home).toContain(">Health · Wellness · Charity · Sport<");
+    expect(home).toMatch(/<a class="button button-gold" href="\/week">/);
+    expect(home).toContain('href="/book"');
+  });
+
+  it("every public and member page has the site menu and the club's contact details", () => {
+    const site = Object.entries(pages).filter(([path]) => !path.startsWith("/admin"));
+    expect(site).toHaveLength(14);
+    for (const [path, html] of site) {
+      for (const [href, label] of NAV) {
+        expect(html, path).toContain(`<a href="${href}"`);
+        expect(html, path).toContain(`>${escapeText(label)}</a>`);
+      }
+      expect(html, path).toContain('<nav id="site-nav" class="site-nav" aria-label="Main">');
+      expect(html, path).toContain("1314 N Salina St, Syracuse, NY 13208");
+      expect(html, path).toContain('<a href="tel:3154717929">315-471-7929</a>');
+      expect(html, path).toContain('<a href="mailto:pastimeathleticclub@gmail.com">pastimeathleticclub@gmail.com</a>');
+      expect(html, path).toContain('<a href="https://facebook.com/pastimeac" rel="noopener">Facebook</a>');
+      expect(html, path).toContain('<a href="https://x.com/PastimeAC1892" rel="noopener">X</a>');
+      expect(html, path).not.toMatch(/weebly|blogspot|calendar\.google/i);
+    }
+  });
+
+  it("marks the current page in the menu", () => {
+    expect(pages["/week"]).toContain('<a href="/week" aria-current="page">This Week</a>');
+    expect(pages["/book"]).toContain('<a href="/book" aria-current="page">Book</a>');
+    expect(pages["/banquets"]).toContain('<a href="/banquets" aria-current="page">Bar &amp; Banquets</a>');
+    expect(pages["/"]).toContain('<a href="/" aria-current="page">Home</a>');
+    expect((pages["/history"] ?? "").match(/aria-current="page"/g)).toHaveLength(1);
+  });
+
+  it("the Contact page has the map link, phone and email as big links", () => {
+    const contact = pages["/contact"] ?? "";
+    expect(contact).toContain('<main id="main" class="wide contact-page">');
+    expect(contact).toContain(`<a href="${CLUB.contact.map}" rel="noopener">Map (OpenStreetMap)</a>`);
+    expect(contact.match(/href="tel:3154717929"/g)?.length).toBe(2); // page and footer
+  });
+
+  it("the content pages show the club's text (drafts locally, placeholders in CI)", () => {
+    for (const [path, key] of [["/athletics", "athletics"], ["/bowling", "bowling"], ["/banquets", "banquets"], ["/history", "history"], ["/", "home"]]) {
+      expect(pages[path], path).toContain(CONTENT.pages[key] ?? "missing");
+    }
+    const photos = pages["/photos"] ?? "";
+    if (CONTENT.photos.length === 0) expect(photos).toContain("Photos are coming soon");
+    else for (const p of CONTENT.photos) expect(photos).toContain(`src="${p.src}"`);
   });
 
   it("the limits on the pages come from the settings", () => {
@@ -203,15 +284,17 @@ describe("the club's starting list of courts and rooms", () => {
     const admin = await loginAdmin(await makeAdmin());
     const added = await admin.post("/api/admin/resources/starting-list");
     expect(added.status).toBe(201);
-    expect(await added.json()).toEqual({ added: 4 });
+    expect(await added.json()).toEqual({ added: 12 });
 
     const { resources } = await (await admin.get("/api/admin/resources")).json();
-    expect(resources.map((/** @type {{ name: string }} */ r) => r.name)).toEqual([...CLUB.starting_resources]);
+    expect(resources.map((/** @type {{ name: string, area: string }} */ r) => ({ name: r.name, area: r.area }))).toEqual(
+      CLUB.starting_resources.map((r) => ({ name: r.name, area: r.area })),
+    );
     for (const room of resources) {
-      expect(room.hours).toEqual([0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, opens: "09:00", closes: "22:00" })));
+      expect(room.hours).toEqual([0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, opens: "08:00", closes: "22:00" })));
     }
     const log = await db.prepare("SELECT details FROM audit_log WHERE action = 'resource.starting_list'").first();
-    expect(JSON.parse(String(log?.details)).resources).toEqual([...CLUB.starting_resources]);
+    expect(JSON.parse(String(log?.details)).resources).toEqual(CLUB.starting_resources.map((r) => r.name));
 
     const again = await admin.post("/api/admin/resources/starting-list");
     expect(again.status).toBe(409);
