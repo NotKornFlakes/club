@@ -7,15 +7,18 @@ members, resources, leagues and no-shows.
 It runs as one Cloudflare Worker with a D1 database, all set up by Terraform and deployed by
 GitHub Actions. Design and reasoning: [docs/architecture.md](docs/architecture.md).
 
-> **Status:** member login, booking, no-shows and suspensions, and admin are built and run
-> locally (see "Run it locally"). Hardening, then the club's own domain, come next.
+> **Status:** the whole club website runs locally (see "Run it locally"): the public pages,
+> This Week, the week-view booking, bowling lanes, programs, member login, no-shows and
+> suspensions, and admin. Next: the editor role and the banquet form, then the club's domain.
 
 ## What's where
 
 | Path | What it is |
 |---|---|
+| `clubs/pastime/` | The club: its settings (`club.json`), page text (`pages/`) and photo list (`photos.json`) |
+| `clubs/pastime/drafts/` | **Local only, never committed:** draft text and photos from the club's old site |
 | `worker/src/` | The Worker: plain JavaScript with `// @ts-check` and JSDoc types |
-| `worker/public/` | Static pages and CSS |
+| `worker/public/` | Static pages, CSS and browser scripts (the club's text is filled in as pages are served) |
 | `worker/migrations/` | The D1 database schema, as numbered SQL files |
 | `worker/test/` | Tests that run in the real Workers runtime against a local D1 |
 | `worker/wrangler.json` | Worker settings, read by both wrangler and Terraform |
@@ -175,6 +178,12 @@ the booking rules, and the starting list of courts and rooms with their starting
 Change it in a PR like any other code. The Worker reads it when it starts, and every page,
 message and script gets its values from there.
 
+- **Name, motto, year, contact** (`name`, `motto`, `founded`, `contact`): the header, the
+  footer on every page, and the Contact page (address, OpenStreetMap link, phone, email,
+  Facebook and X).
+- **Areas** (`areas`): the week view's switcher (Gym, Bowling lanes, Rooms).
+- **Redirects** (`redirects`): the old site's page addresses → the new pages, so old links
+  keep working.
 - **Booking limits** (`booking`): the longest booking, upcoming bookings per member, days
   ahead, the cancel cutoff, the suggested suspension length, and the missed-bookings count
   in the rules. The database also enforces 2 hours and 2 upcoming bookings for every club,
@@ -183,19 +192,52 @@ message and script gets its values from there.
   limits, so the rules can never disagree with what the site enforces. They show on the
   Rules page and before every booking.
 - **Admin limit** (`max_admins`): how many admins setup allows. Default 2; Pastime uses 1.
-- **Colors**: only the accent and its text color, light and dark. The tests check WCAG AA
-  contrast.
+- **Colors**: the brand (navy and gold for the header and footer) and the accent for links
+  and buttons, light and dark. The tests check WCAG AA contrast.
 - **Starting list**: loaded once into an empty site (above). After that, the admin pages own
   courts, rooms and hours.
 
 **Never put secrets in this file**, and never the throttle or alarm settings: the repo is
 public. Only the settings listed above are allowed; anything else stops the Worker from
-starting, and the tests fail. Pastime's address and contact details are placeholders until
-the club confirms them, and there's no logo until the club gives permission.
+starting, and the tests fail. The crest and the club's photos are drafts (local only)
+until the club gives permission.
 
 To set the site up for another club, give it its own `clubs/<club>/club.json` and point the
 one import in `worker/src/club.js` at it. Each club gets its own Cloudflare account,
 database and secrets.
+
+### Club content: page text and photos
+
+The Home, Athletics, Bowling, Bar & Banquets and History pages get their text from
+`clubs/pastime/pages/*.html`, and the Photos page from `clubs/pastime/photos.json`. These
+are short HTML files with only simple tags (headings, paragraphs, lists, links, bold,
+images of the club's own photos). A check refuses anything else (scripts, styles, embeds,
+outside images) when the site builds and again when it starts.
+
+**Drafts stay on your computer.** `clubs/pastime/drafts/` holds the club's text and photos
+copied from its old site, for showing the club a demo. It's in `.gitignore`: never commit it,
+and never paste its text into the committed files, until the club gives permission. When
+the drafts folder is there, `npm run dev` and `npm test` use it; CI and the live site never
+have it, so they use the committed placeholders. To see the site exactly as CI builds it,
+run `CLUB_CONTENT=placeholders npm run dev`.
+
+`npm run content` gathers it all (it also runs by itself before dev, test, typecheck and
+build). Photos are resized and stripped of location and camera data before they go in.
+
+### Programs and This Week
+
+**This Week** (`/week`, anyone) and **Book** (`/book`, members) show a whole week: days
+across, hours down, with Gym · Bowling lanes · Rooms above it. On a phone it's one day at
+a time: swipe, or tap the day tabs. Logged out, it's view only, with **Log in to book**.
+
+- A **program** is a league with **Show on This Week** ticked (Admin → Leagues and
+  programs): Pickleball, Open gym, Ping Pong, Youth. It shows with its name; members can't
+  book over it. A league without the tick shows only as "Taken".
+- For a program on several days (Monday to Friday), add one season per day.
+- Every court, room and lane has an **area** (Admin → Courts & rooms), which decides where
+  it shows. Bowling lanes have **Any lane**: a time is free if any lane is free, and the
+  booking gets the first lane that's free for the whole time.
+- This Week never shows who booked, admin notes or private league names.
 
 ### Admin bookings, leagues and events
 
@@ -272,12 +314,17 @@ npm run dev       # the site at http://localhost:8787 (Ctrl+C to stop)
 These accounts can't work on the live site, even by mistake. Their PINs and password are
 hashed with the fake pepper from `.dev.vars`, so they don't match under the real one.
 
-The seed data also has the club's starting courts and rooms from its settings file (for
-Pastime: the Gymnasium, President's Room, Century Room and Lounge, open 9 a.m. to 10 p.m.
-every day), two league seasons in the gymnasium (Monday charity basketball, 6 to 8 p.m., and
-a Tuesday basketball league, 7 to 9 p.m., for the next 3 months), a few bookings, so you can
-see "Taken" slots, and two club events. Pastime's admin limit is 1 and the seed admin fills
-it, so `/admin/setup` shows "closed" locally.
+The seed data also has the club's starting courts, lanes and rooms from its settings file
+(for Pastime: the Gymnasium, Lanes 1 to 8, the President's Room, Century Room and Lounge,
+open 8 a.m. to 10 p.m. every day as a placeholder), four programs in the gym for the next 3
+months (Pickleball and Open gym Monday to Friday at 11 a.m. and 3 p.m., Ping Pong Sunday at
+2 p.m., Youth Saturday at 8 a.m.; placeholder lengths of 2 hours), two private leagues
+(Monday charity basketball and a Tuesday basketball league), a few bookings, so you can see
+"Taken" slots, and two club events. Pastime's admin limit is 1 and the seed admin fills it,
+so `/admin/setup` shows "closed" locally.
+
+To see the club's drafts (its text, photos and crest), the folder `clubs/pastime/drafts/`
+must be on your computer; it is never in git. Without it, the site shows the placeholders.
 
 ### Checks
 
@@ -353,7 +400,7 @@ Turnstile while the alarm is on.
 
 *One page you can print or send to members. Replace the bracketed parts with the club's details.*
 
-> ### Booking the court and rooms at [Club name]
+> ### Booking the gym, lanes and rooms at [Club name]
 >
 > **You need:** your member number, and the 6-digit PIN the club gave you. Keep your PIN
 > private; it's for you only.
@@ -361,11 +408,13 @@ Turnstile while the alarm is on.
 > **1. Log in.** Go to **[site address]** and tap **Member login**. Type your member number
 > and PIN, then tap **Log in**. You stay logged in on that phone or computer for 30 days.
 >
-> **2. Book.** Tap **Book**. Choose the court or room, then the day (up to 30 days ahead).
-> Free times show **Free**; times someone else has booked show **Taken**. Tap the time you
-> want to start, then choose how long (15 minutes up to 2 hours).
+> **2. Book.** Tap **Book**. Choose **Gym**, **Bowling lanes** or **Rooms**. You see the
+> week (on a phone, one day at a time: swipe or tap a day). Programs like Pickleball show
+> by name; times someone else has booked show **Taken**. Tap a **Free** time, then choose
+> the start time and how long (15 minutes up to 2 hours). For bowling, choose a lane or
+> **Any lane**.
 >
-> **3. Agree to the rules.** Read the booking rules, tick **I agree**, and tap **Book it**.
+> **3. Agree to the rules.** Read the booking rules, tick **I agree**, and tap **Book**.
 >
 > **4. Add it to your calendar.** Tap **Add to calendar** to get a reminder 1 hour before.
 >

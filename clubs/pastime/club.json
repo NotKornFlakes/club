@@ -1,15 +1,37 @@
 {
   "name": "Pastime Athletic Club",
-  "intro": "Book the gymnasium and club rooms.",
-  "address": "[Street address], Syracuse, NY [ZIP code]",
-  "contact": "[Contact details]",
-  "website": "https://pastimeathleticclub.org",
+  "motto": "Health · Wellness · Charity · Sport",
+  "founded": 1892,
+  "contact": {
+    "address": "1314 N Salina St, Syracuse, NY 13208",
+    "phone": "315-471-7929",
+    "email": "pastimeathleticclub@gmail.com",
+    "map": "https://www.openstreetmap.org/search?query=1314%20N%20Salina%20St%2C%20Syracuse%2C%20NY%2013208",
+    "links": [
+      { "label": "Facebook", "url": "https://facebook.com/pastimeac" },
+      { "label": "X", "url": "https://x.com/PastimeAC1892" }
+    ]
+  },
+  "redirects": {
+    "/about.html": "/history",
+    "/club-history.html": "/history",
+    "/bar-restaurant-and-banquets.html": "/banquets",
+    "/map.html": "/contact",
+    "/calendar.html": "/week",
+    "/pastimer-news.html": "/"
+  },
   "time_zone": "America/New_York",
   "max_admins": 1,
   "colors": {
-    "light": { "accent": "#4a5560", "accent_text": "#ffffff" },
-    "dark": { "accent": "#b4bec8", "accent_text": "#0a0a0a" }
+    "brand": { "background": "#1b2a4a", "text": "#ffffff", "highlight": "#e0b84a" },
+    "light": { "accent": "#1b2a4a", "accent_text": "#ffffff" },
+    "dark": { "accent": "#e3bd55", "accent_text": "#10192b" }
   },
+  "areas": [
+    { "id": "gym", "name": "Gym" },
+    { "id": "bowling", "name": "Bowling lanes", "any_label": "Any lane" },
+    { "id": "rooms", "name": "Rooms" }
+  ],
   "booking": {
     "max_length_minutes": 120,
     "max_upcoming": 2,
@@ -25,6 +47,19 @@
     "Please book only the time you'll use, so other members get a turn.",
     "Your member number and PIN are for you only. Don't share them."
   ],
-  "starting_resources": ["Gymnasium", "President's Room", "Century Room", "Lounge"],
-  "starting_hours": { "opens": "09:00", "closes": "22:00" }
+  "starting_resources": [
+    { "name": "Gymnasium", "area": "gym" },
+    { "name": "Lane 1", "area": "bowling" },
+    { "name": "Lane 2", "area": "bowling" },
+    { "name": "Lane 3", "area": "bowling" },
+    { "name": "Lane 4", "area": "bowling" },
+    { "name": "Lane 5", "area": "bowling" },
+    { "name": "Lane 6", "area": "bowling" },
+    { "name": "Lane 7", "area": "bowling" },
+    { "name": "Lane 8", "area": "bowling" },
+    { "name": "President's Room", "area": "rooms" },
+    { "name": "Century Room", "area": "rooms" },
+    { "name": "Lounge", "area": "rooms" }
+  ],
+  "starting_hours": { "opens": "08:00", "closes": "22:00" }
 }

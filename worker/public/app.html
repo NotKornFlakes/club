@@ -7,18 +7,19 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/club.css">
+  <script src="/js/early.js"></script>
+  <script type="module" src="/js/site.js"></script>
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header class="topbar">
-    <nav aria-label="Main">
-      <a href="/app" aria-current="page">My bookings</a>
-      <a href="/book">Book</a>
-      <a href="/events">Club events</a>
-      <button type="button" class="link-button" data-logout>Log out</button>
-    </nav>
-  </header>
+  <header data-site-header></header>
+  <nav class="member-bar" aria-label="Members">
+    <a href="/app" aria-current="page">My bookings</a>
+    <a href="/book">Book</a>
+    <a href="/events">Club events</a>
+    <button type="button" class="link-button" data-logout>Log out</button>
+  </nav>
   <main id="main">
     <h1>My bookings</h1>
     <p class="lead">Member <strong id="member-number">…</strong></p>
@@ -39,8 +40,6 @@
       <span data-club="suspension_length"></span>. If you think one is wrong, please contact
       management.</p>
   </main>
-  <footer>
-    <a href="/rules">Booking rules</a>
-  </footer>
+  <footer data-site-footer></footer>
 </body>
 </html>

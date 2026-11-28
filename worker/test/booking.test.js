@@ -251,7 +251,8 @@ describe("club events", () => {
 describe("the rules shown before booking", () => {
   it("match the Rules page word for word, both from the club's settings file", async () => {
     const page = await (await exports.default.fetch(`${ORIGIN}/rules`)).text();
-    const fromPage = [...page.matchAll(/<li>(.*?)<\/li>/g)].map((m) => m[1]);
+    const list = page.slice(page.indexOf('<ul class="rules">'), page.indexOf("</ul>", page.indexOf('<ul class="rules">')));
+    const fromPage = [...list.matchAll(/<li>(.*?)<\/li>/g)].map((m) => m[1]);
     expect(fromPage).toHaveLength(5);
     expect(fromPage).toEqual(CLUB.rules.map(escapeText));
 
@@ -259,6 +260,6 @@ describe("the rules shown before booking", () => {
     const settings = JSON.parse(script.slice(script.indexOf("{"), script.lastIndexOf("}") + 1));
     expect(settings.rules).toEqual(CLUB.rules);
     // The confirmation step lists exactly those.
-    expect(await (await exports.default.fetch(`${ORIGIN}/js/book.js`)).text()).toContain("CLUB.rules.map(");
+    expect(await (await exports.default.fetch(`${ORIGIN}/js/week.js`)).text()).toContain("CLUB.rules.map(");
   });
 });

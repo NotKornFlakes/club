@@ -27,13 +27,14 @@ export const RULE_PLACEHOLDERS = Object.freeze([
 
 const TOP_KEYS = [
   "name",
-  "intro",
-  "address",
+  "motto",
+  "founded",
   "contact",
-  "website",
+  "redirects",
   "time_zone",
   "max_admins",
   "colors",
+  "areas",
   "booking",
   "rules",
   "starting_resources",
@@ -50,6 +51,11 @@ const BOOKING_KEYS = [
 
 /**
  * @typedef {{ accent: string, accent_text: string }} Scheme
+ * @typedef {{ background: string, text: string, highlight: string }} Brand
+ * @typedef {{ label: string, url: string }} Link
+ * @typedef {{ address: string, phone: string, email: string, map: string, links: ReadonlyArray<Link> }} Contact
+ * @typedef {{ id: string, name: string, any_label: string | null }} Area
+ * @typedef {{ name: string, area: string }} StartingResource
  * @typedef {{
  *   max_length_minutes: number, max_upcoming: number, days_ahead: number,
  *   cancel_cutoff_hours: number, suspension_months: number, missed_bookings_limit: number,
@@ -59,12 +65,14 @@ const BOOKING_KEYS = [
  *   missed_bookings: string, suspension_length: string, admin_limit: string, time_zone_city: string,
  * }} Phrases
  * @typedef {{
- *   name: string, intro: string, address: string, contact: string, website: string,
+ *   name: string, motto: string, founded: number, since: string, contact: Contact,
+ *   redirects: Readonly<Record<string, string>>,
  *   time_zone: string, max_admins: number,
- *   colors: { light: Scheme, dark: Scheme },
+ *   colors: { brand: Brand, light: Scheme, dark: Scheme },
+ *   areas: ReadonlyArray<Area>,
  *   booking: BookingLimits,
  *   rules: ReadonlyArray<string>,
- *   starting_resources: ReadonlyArray<string>,
+ *   starting_resources: ReadonlyArray<StartingResource>,
  *   starting_hours: { opens: string, closes: string },
  *   phrases: Phrases,
  * }} Club
@@ -137,7 +145,7 @@ function timeZone(value, path) {
 }
 
 /** @param {unknown} value @param {string} path */
-function website(value, path) {
+function httpsUrl(value, path) {
   const address = text(value, path, 200);
   /** @type {URL} */
   let url;
@@ -152,12 +160,80 @@ function website(value, path) {
   return address;
 }
 
-/** @param {unknown} value @param {string} path @param {number} maxItems @param {number} maxLength */
-function textList(value, path, maxItems, maxLength) {
+/** @param {unknown} value @param {string} path @param {number} maxItems @returns {unknown[]} */
+function list(value, path, maxItems) {
   if (!Array.isArray(value) || value.length === 0 || value.length > maxItems) {
     throw problem(path, `must be a list of 1 to ${maxItems} items`);
   }
-  return value.map((item, i) => text(item, `${path}[${i}]`, maxLength));
+  return value;
+}
+
+/** @param {unknown} value @param {string} path @param {number} maxItems @param {number} maxLength */
+function textList(value, path, maxItems, maxLength) {
+  return list(value, path, maxItems).map((item, i) => text(item, `${path}[${i}]`, maxLength));
+}
+
+/** @param {unknown} value @param {string} path */
+function email(value, path) {
+  const address = text(value, path, 120);
+  if (!/^[^\s@<>"']+@[^\s@<>"']+\.[a-z]{2,}$/i.test(address)) throw problem(path, "must be an email address");
+  return address;
+}
+
+/** @param {unknown} value @param {string} path */
+function phone(value, path) {
+  const number = text(value, path, 30);
+  if (!/^[0-9+().\- ]{7,30}$/.test(number)) throw problem(path, 'must be a phone number like "315-471-7929"');
+  return number;
+}
+
+/** @param {unknown} raw @returns {Contact} */
+function contactDetails(raw) {
+  const c = exactKeys(raw, "contact", ["address", "phone", "email", "map", "links"]);
+  const links = list(c.links, "contact.links", 6).map((item, i) => {
+    const link = exactKeys(item, `contact.links[${i}]`, ["label", "url"]);
+    return Object.freeze({ label: text(link.label, `contact.links[${i}].label`, 30), url: httpsUrl(link.url, `contact.links[${i}].url`) });
+  });
+  return Object.freeze({
+    address: text(c.address, "contact.address", 200),
+    phone: phone(c.phone, "contact.phone"),
+    email: email(c.email, "contact.email"),
+    map: httpsUrl(c.map, "contact.map"),
+    links: Object.freeze(links),
+  });
+}
+
+/**
+ * Old page addresses (from the club's previous website) → this site's pages, so old links
+ * and bookmarks keep working. Both sides must be plain paths on this site.
+ * @param {unknown} raw @returns {Readonly<Record<string, string>>}
+ */
+function redirectList(raw) {
+  if (raw === undefined) return Object.freeze({});
+  if (!isObject(raw) || Object.keys(raw).length > 100) throw problem("redirects", "must be a group of up to 100 old → new paths");
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [from, to] of Object.entries(raw)) {
+    if (!/^\/[a-z0-9._\/-]{1,100}$/.test(from)) throw problem(`redirects["${from}"]`, "must be a lowercase path like /about.html");
+    if (typeof to !== "string" || !/^\/[a-z0-9\/-]{0,100}$/.test(to)) throw problem(`redirects["${from}"]`, 'must go to a path on this site, like "/history"');
+    if (from.startsWith("/api/") || from === to) throw problem(`redirects["${from}"]`, "can't be an /api/ path or point at itself");
+    out[from] = to;
+  }
+  return Object.freeze(out);
+}
+
+/** @param {unknown} raw @returns {ReadonlyArray<Area>} */
+function areaList(raw) {
+  const areas = list(raw, "areas", 6).map((item, i) => {
+    const a = exactKeys(item, `areas[${i}]`, ["id", "name", "any_label"], ["any_label"]);
+    if (typeof a.id !== "string" || !/^[a-z][a-z0-9-]{0,19}$/.test(a.id)) {
+      throw problem(`areas[${i}].id`, 'must be a short lowercase id like "gym"');
+    }
+    const anyLabel = a.any_label === undefined ? null : text(a.any_label, `areas[${i}].any_label`, 30);
+    return Object.freeze({ id: a.id, name: text(a.name, `areas[${i}].name`, 30), any_label: anyLabel });
+  });
+  if (new Set(areas.map((a) => a.id)).size !== areas.length) throw problem("areas", "has the same id twice");
+  return Object.freeze(areas);
 }
 
 /** "1 hour", "2 hours". @param {number} n @param {string} one @param {string} many */
@@ -173,11 +249,12 @@ const duration = (minutes) => (minutes % 60 === 0 ? count(minutes / 60, "hour", 
  * @returns {Readonly<Club>}
  */
 export function parseClub(raw) {
-  const top = exactKeys(raw, "club", TOP_KEYS, ["max_admins"]);
+  const top = exactKeys(raw, "club", TOP_KEYS, ["max_admins", "redirects"]);
   const zone = timeZone(top.time_zone, "time_zone");
   const maxAdmins = top.max_admins === undefined ? DEFAULT_MAX_ADMINS : whole(top.max_admins, "max_admins", 1, 10);
 
-  const colors = exactKeys(top.colors, "colors", ["light", "dark"]);
+  const colors = exactKeys(top.colors, "colors", ["brand", "light", "dark"]);
+  const brand = exactKeys(colors.brand, "colors.brand", ["background", "text", "highlight"]);
   /** @param {"light" | "dark"} name @returns {Scheme} */
   const scheme = (name) => {
     const s = exactKeys(colors[name], `colors.${name}`, ["accent", "accent_text"]);
@@ -216,22 +293,38 @@ export function parseClub(raw) {
     return filled;
   });
 
-  const resources = textList(top.starting_resources, "starting_resources", 20, 60);
-  if (new Set(resources).size !== resources.length) throw problem("starting_resources", "has the same name twice");
+  const areas = areaList(top.areas);
+  const resources = list(top.starting_resources, "starting_resources", 40).map((item, i) => {
+    const r = exactKeys(item, `starting_resources[${i}]`, ["name", "area"]);
+    if (!areas.some((a) => a.id === r.area)) throw problem(`starting_resources[${i}].area`, "must be one of the areas' ids");
+    return Object.freeze({ name: text(r.name, `starting_resources[${i}].name`, 60), area: String(r.area) });
+  });
+  if (new Set(resources.map((r) => r.name)).size !== resources.length) throw problem("starting_resources", "has the same name twice");
   const hours = exactKeys(top.starting_hours, "starting_hours", ["opens", "closes"]);
   const opens = quarterHour(hours.opens, "starting_hours.opens");
   const closes = quarterHour(hours.closes, "starting_hours.closes");
   if (opens >= closes) throw problem("starting_hours", "must close after it opens");
 
+  const founded = whole(top.founded, "founded", 1600, 2100);
   return Object.freeze({
     name: text(top.name, "name", 80),
-    intro: text(top.intro, "intro", 200),
-    address: text(top.address, "address", 200),
-    contact: text(top.contact, "contact", 200),
-    website: website(top.website, "website"),
+    motto: text(top.motto, "motto", 80),
+    founded,
+    since: `Since ${founded}`,
+    contact: contactDetails(top.contact),
+    redirects: redirectList(top.redirects),
     time_zone: zone,
     max_admins: maxAdmins,
-    colors: Object.freeze({ light: scheme("light"), dark: scheme("dark") }),
+    colors: Object.freeze({
+      brand: Object.freeze({
+        background: color(brand.background, "colors.brand.background"),
+        text: color(brand.text, "colors.brand.text"),
+        highlight: color(brand.highlight, "colors.brand.highlight"),
+      }),
+      light: scheme("light"),
+      dark: scheme("dark"),
+    }),
+    areas,
     booking,
     rules: Object.freeze(rules),
     starting_resources: Object.freeze(resources),
@@ -251,6 +344,7 @@ export function publicClub(club) {
     booking: club.booking,
     rules: club.rules,
     phrases: club.phrases,
+    areas: club.areas,
     starting_resources: club.starting_resources,
     starting_hours: club.starting_hours,
   };

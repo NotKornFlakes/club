@@ -3,7 +3,7 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { decryptText, pepperKeys, verifySecret } from "../src/crypto.js";
-import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
+import { LOCAL_DATABASE_ID, SEED_ADMIN, SEED_LEAGUES, SEED_MEMBERS, SEED_PROGRAMS, buildSeed, seedCommands, toSqlScript } from "../scripts/seed-data.js";
 import seedScript from "../scripts/seed.mjs?raw";
 import { CLUB } from "../src/club.js";
 import wranglerConfig from "../wrangler.json";
@@ -58,7 +58,7 @@ describe("local seed data", () => {
     expect(counts).toMatchObject({
       resources: CLUB.starting_resources.length,
       hours: CLUB.starting_resources.length * 7,
-      bookings: 4,
+      bookings: 5,
       events: 2,
       no_shows: 2,
       suspensions: 1,
@@ -66,28 +66,22 @@ describe("local seed data", () => {
     });
     expect(counts?.slots).toBe(counts?.slots_needed);
 
-    const { results: rooms } = await db.prepare("SELECT name FROM resources ORDER BY sort_order").all();
-    expect(rooms.map((r) => r.name)).toEqual([...CLUB.starting_resources]);
-    expect(CLUB.starting_resources).toEqual(["Gymnasium", "President's Room", "Century Room", "Lounge"]);
+    const { results: rooms } = await db.prepare("SELECT name, area FROM resources ORDER BY sort_order").all();
+    expect(rooms).toEqual(CLUB.starting_resources.map((r) => ({ name: r.name, area: r.area })));
     const { results: hours } = await db.prepare("SELECT DISTINCT opens_local, closes_local FROM opening_hours").all();
-    expect(hours).toEqual([{ opens_local: "09:00", closes_local: "22:00" }]);
+    expect(hours).toEqual([{ opens_local: CLUB.starting_hours.opens, closes_local: CLUB.starting_hours.closes }]);
   });
 
-  it("has two league seasons in the gymnasium, booked every free week, with clashes skipped", async () => {
-    const { results: leagues } = await db.prepare("SELECT id, name, weekday, starts_local, ends_local, resource_id FROM leagues ORDER BY id").all();
-    expect(leagues.map((l) => l.name)).toEqual(SEED_LEAGUES.map((l) => l.name));
-    expect(leagues.every((l) => l.resource_id === 1)).toBe(true);
-    for (const league of leagues) {
-      const row = await db
-        .prepare(
-          `SELECT (SELECT COUNT(*) FROM bookings WHERE league_id = ?1) AS booked,
-                  (SELECT COUNT(*) FROM league_skips WHERE league_id = ?1) AS skipped`,
-        )
-        .bind(league.id)
-        .first();
-      // About 13 weeks in a 3-month season; today's may have passed, and clashes are skipped.
-      expect(Number(row?.booked) + Number(row?.skipped)).toBeGreaterThanOrEqual(12);
-      expect(Number(row?.booked)).toBeGreaterThanOrEqual(11);
+  it("has four programs (public) and two leagues (private) in the gym, booked every week", async () => {
+    const { results: rows } = await db.prepare("SELECT l.id, l.name, l.public, r.area FROM leagues l JOIN resources r ON r.id = l.resource_id ORDER BY l.id").all();
+    const seasons = [...SEED_PROGRAMS.map((p) => ({ ...p, public: 1 })), ...SEED_LEAGUES.map((l) => ({ ...l, public: 0 }))];
+    expect(rows.map((r) => [r.name, r.public])).toEqual(seasons.flatMap((x) => x.weekdays.map(() => [x.name, x.public])));
+    expect(SEED_PROGRAMS.map((p) => p.name)).toEqual(["Pickleball", "Open gym", "Ping Pong", "Youth"]);
+    expect(rows.every((r) => r.area === "gym")).toBe(true);
+    for (const row of rows) {
+      const n = await db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE league_id = ? AND status = 'active'").bind(row.id).first();
+      // About 13 weeks in a 3-month season (today's may already have passed).
+      expect(Number(n?.n), String(row.name)).toBeGreaterThanOrEqual(12);
     }
   });
 

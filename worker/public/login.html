@@ -7,10 +7,13 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/club.css">
+  <script src="/js/early.js"></script>
+  <script type="module" src="/js/site.js"></script>
   <script type="module" src="/js/login.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
+  <header data-site-header></header>
   <main id="main">
     <h1>Member login</h1>
 
@@ -38,8 +41,6 @@
     <p class="help">Forgot your PIN? Please ask management for a new one.</p>
     <p class="help">After 5 wrong tries, your account locks for 15 minutes, then 1 hour, then 24 hours.</p>
   </main>
-  <footer>
-    <a href="/">Home</a> · <a href="/rules">Booking rules</a>
-  </footer>
+  <footer data-site-footer></footer>
 </body>
 </html>

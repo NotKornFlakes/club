@@ -86,7 +86,7 @@ async function load() {
       );
     }
     return el("article", { className: "card" }, [
-      el("h3", { text: l.name }),
+      el("h3", { text: l.public ? `${l.name} (program: shown on This Week)` : l.name }),
       el("p", { text: `${l.resource}, every ${l.weekday}, ${l.starts_local}–${l.ends_local}` }),
       el("p", { text: `${formatClubDate(l.first_date)} to ${formatClubDate(l.last_date)}. ${state}${l.renewed ? " (renewed)" : ""}. ${l.booked} date(s) booked.` }),
       actions,
@@ -108,6 +108,7 @@ byId("league-form").addEventListener("submit", async (event) => {
         ends_local: value("ends"),
         first_date: value("first"),
         last_date: value("last"),
+        public: /** @type {HTMLInputElement} */ (byId("public")).checked,
       },
     });
     showResult(`${value("name")}: season created`, result);

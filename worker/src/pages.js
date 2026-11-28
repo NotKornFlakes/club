@@ -3,10 +3,24 @@
 // (that comes from /api, which checks the login on every call); this sends logged-out
 // visitors to the right login page instead of showing them an empty screen.
 
-/** Public pages: home, rules, the login pages, and the 404 page. */
-const PUBLIC_PAGES = new Set(["/", "/rules", "/login", "/404", "/admin/login", "/admin/setup"]);
+/** Public pages: the club's pages, This Week, rules, the login pages, and the 404 page. */
+export const PUBLIC_PAGES = new Set([
+  "/",
+  "/week",
+  "/bowling",
+  "/athletics",
+  "/banquets",
+  "/history",
+  "/photos",
+  "/contact",
+  "/rules",
+  "/login",
+  "/404",
+  "/admin/login",
+  "/admin/setup",
+]);
 /** Pages that need a member login. */
-const MEMBER_PAGES = new Set(["/app", "/book", "/events"]);
+export const MEMBER_PAGES = new Set(["/app", "/book", "/events"]);
 /** Login pages: their CSP allows Turnstile while the alarm is on. */
 export const LOGIN_PAGES = new Set(["/login", "/admin/login"]);
 

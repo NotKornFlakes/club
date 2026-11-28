@@ -96,6 +96,22 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
 - Double booking prevented by a database constraint, not just the UI.
 - All times stored in UTC, displayed in the club's time zone.
 
+## The site (decided 2026-11-28, built as a demo)
+- One site, with no links to the Weebly site, the blog or the Google Calendar. Menu: Home ·
+  This Week · Book · Bowling · Athletics · Bar & Banquets · History · Photos · Contact.
+- Contact details in the footer of every page and on the Contact page: 1314 N Salina St,
+  Syracuse NY 13208 · 315-471-7929 · pastimeathleticclub@gmail.com · Facebook and X.
+- Look: navy and gold, the "P" crest, "Health · Wellness · Charity · Sport", "Since 1892",
+  the historic photos. Mobile-first, checked at 375px wide.
+- This Week and Book show a full week: days across, hours down, previous/next week. Phone:
+  one day at a time, swipeable, with day tabs. Switcher: Gym · Bowling lanes · Rooms.
+  Logged out: view only, with "Log in to book". Logged in: tap a free time for the
+  booking sheet (start in 15-minute steps, length up to 2 hours). Bowling: a lane or
+  "any lane".
+- The current site's text and photos (and the crest) are drafts for the demo, kept in
+  `clubs/pastime/drafts/` (gitignored). Never commit or publish them until the club gives
+  permission.
+
 ## What's On and programs
 - A public "What's On" calendar, generated from the booking system: programs and club
   events marked public. Never member bookings, names or member numbers.
@@ -105,7 +121,8 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
   Pickleball, Mon–Fri 3 p.m. Open gym, Sun 2 p.m. Ping Pong, Sat 8 a.m. Youth.
 - A program blocks its times for member booking. A date that clashes with an existing
   member booking is skipped and listed (same rule as leagues).
-- Planned: leagues become programs that don't show on What's On.
+- Built: a program is a league with "Show on This Week" ticked; other leagues show as
+  "Taken". Starting programs are 2 hours long as a placeholder.
 
 ## Banquet inquiries
 - A public form on Bar & Banquets: name, email, request. It emails the club's inbox. No
@@ -278,8 +295,8 @@ Rules page linked in the footer:
 - [x] Architecture + D1 schema approved 2026-11-26, with changes (`docs/architecture.md`)
 - [ ] Branch ruleset + `production` environment reviewer set up (before the first merge)
 - [x] Build steps 1–7 and per-club config merged (#6–#12, #14)
-- [ ] Get #7–#12 and #14 onto main: each was merged into its parent branch, after that
-  parent had already been merged, so only #6 reached main. PR #16 brings the rest over.
-- [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; decisions agreed; not
-  built). Steps 1–9 wait until I've met the club.
+- [x] #7–#12 and #14 brought onto main (#16, #17)
+- [ ] Full site (planned 2026-11-28 in `docs/full-site-plan.md`; decisions agreed). Steps 2, 3
+  and 4 (programs and This Week, the pages, bowling lanes) built early on 2026-11-28 as a
+  demo for the club, in one PR. Steps 1 and 5–9 still wait until I've met the club.
 - [ ] DNS move and launch (planned in `docs/launch-dns.md`; nothing changed yet)

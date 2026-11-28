@@ -1,7 +1,8 @@
 # Plan: the club's whole website
 
 Status: **plan only. Nothing here is built.** Decisions agreed 2026-11-28 (section 11).
-Build steps 1–9 wait until the owner has met the club; only step 0 (PR #16) is under way.
+Step 0 is done (#16, #17). Steps 2, 3 and 4 were built early, as a demo for the club. The
+others wait until the owner has met the club.
 Scope changed on 2026-11-28: this project now
 replaces the club's whole Weebly site, not just booking. `CLAUDE.md` has the requirements;
 this document says how we'd meet them, the build steps, and what we need from the club.

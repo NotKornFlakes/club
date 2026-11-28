@@ -37,10 +37,13 @@ const sessionPosts = postRoutes.filter((r) => r.access !== "public");
 const sessionGets = ROUTES.filter((r) => r.method === "GET" && r.access !== "public");
 
 describe("the route table", () => {
-  it("has only these routes open without a login (all logins or login status)", () => {
+  it("has only these routes open without a login (logins, login status, and the week view)", () => {
     const open = ROUTES.filter((r) => r.access === "public").map((r) => `${r.method} ${r.path}`).sort();
+    // The week view is public and read-only: free, taken, closed and program names only.
+    // test/week.test.js checks it never shows who booked, admin labels or private leagues.
     expect(open).toEqual([
       "GET /api/login-status",
+      "GET /api/week",
       "POST /api/admin/login",
       "POST /api/admin/setup",
       "POST /api/admin/setup/start",

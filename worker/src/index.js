@@ -14,7 +14,9 @@ import { availabilityRoutes } from "./api/availability.js";
 import { bookingRoutes } from "./api/bookings.js";
 import { eventRoutes } from "./api/events.js";
 import { memberAuthRoutes } from "./api/member-auth.js";
+import { weekRoutes } from "./api/week.js";
 import { clubScript, clubStylesheet, fillClubPage } from "./club-pages.js";
+import { CLUB } from "./club.js";
 import { withSecurityHeaders } from "./headers.js";
 import { json, methodNotAllowed, redirect } from "./http.js";
 import { LOGIN_PAGES, pageAccess, pagePath } from "./pages.js";
@@ -31,6 +33,7 @@ export const ROUTES = [
   ...availabilityRoutes,
   ...bookingRoutes,
   ...eventRoutes,
+  ...weekRoutes,
   ...adminAuthRoutes,
   ...adminMemberRoutes,
   ...adminResourceRoutes,
@@ -47,12 +50,13 @@ const api = createRouter(ROUTES);
  * changed?" headers are dropped, so the stored file's ETag can't answer for the filled page.
  * @param {Request} request
  * @param {Env} env
+ * @param {string} page the page path, e.g. "/week"
  */
-async function servePage(request, env) {
+async function servePage(request, env, page) {
   const headers = new Headers(request.headers);
   headers.delete("If-None-Match");
   headers.delete("If-Modified-Since");
-  return fillClubPage(await env.ASSETS.fetch(new Request(request, { headers })));
+  return fillClubPage(await env.ASSETS.fetch(new Request(request, { headers })), page);
 }
 
 /**
@@ -80,6 +84,9 @@ async function route(request, env) {
   // The club's colours and the settings the page scripts need, made from its settings file.
   if (url.pathname === "/club.css") return { response: clubStylesheet(), noStore: false };
   if (url.pathname === "/js/club.js") return { response: clubScript(), noStore: false };
+  // The club's old website's page addresses (its settings file), so old links keep working.
+  const moved = CLUB.redirects[url.pathname.toLowerCase()];
+  if (moved) return { response: new Response(null, { status: 301, headers: { Location: new URL(moved, url).toString() } }), noStore: false };
 
   const access = pageAccess(url.pathname);
   if (access === "member" && !(await readMemberSession(request, env.DB, now))) {
@@ -92,11 +99,11 @@ async function route(request, env) {
   const page = pagePath(url.pathname);
   if (LOGIN_PAGES.has(page)) {
     const turnstile = (await alarmUntil(env.DB, now)) !== null;
-    return { response: await servePage(request, env), noStore: true, turnstile };
+    return { response: await servePage(request, env, page), noStore: true, turnstile };
   }
   // Private pages and every admin page (including setup) are never cached.
   const noStore = access === "member" || access === "admin" || page === "/admin" || page.startsWith("/admin/");
-  return { response: access === "file" ? await env.ASSETS.fetch(request) : await servePage(request, env), noStore };
+  return { response: access === "file" ? await env.ASSETS.fetch(request) : await servePage(request, env, page), noStore };
 }
 
 /** @type {ExportedHandler<Env>} */

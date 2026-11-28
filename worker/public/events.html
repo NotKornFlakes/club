@@ -7,26 +7,25 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/club.css">
+  <script src="/js/early.js"></script>
+  <script type="module" src="/js/site.js"></script>
   <script type="module" src="/js/events.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <header class="topbar">
-    <nav aria-label="Main">
-      <a href="/app">My bookings</a>
-      <a href="/book">Book</a>
-      <a href="/events" aria-current="page">Club events</a>
-      <button type="button" class="link-button" data-logout>Log out</button>
-    </nav>
-  </header>
+  <header data-site-header></header>
+  <nav class="member-bar" aria-label="Members">
+    <a href="/app">My bookings</a>
+    <a href="/book">Book</a>
+    <a href="/events" aria-current="page">Club events</a>
+    <button type="button" class="link-button" data-logout>Log out</button>
+  </nav>
   <main id="main">
     <h1>Club events</h1>
     <p class="lead">Events at other places. For details or tickets, please ask management.</p>
     <p id="message" class="message" role="alert" hidden></p>
     <div id="events" aria-live="polite"><p class="help">Loading…</p></div>
   </main>
-  <footer>
-    <a href="/rules">Booking rules</a>
-  </footer>
+  <footer data-site-footer></footer>
 </body>
 </html>
