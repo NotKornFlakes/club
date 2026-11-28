@@ -42,6 +42,7 @@ club, it's the default.
 | Booking limits: max length, max upcoming bookings, days ahead, cancel cutoff, default suspension length, the no-show count in the rules | `worker/src/bookings.js`, `availability.js`, `discipline.js`; also written out by hand in `book.html`, `app.html`, `js/book.js`, `js/app.js` |
 | Booking rules text | Three copies today: `rules.html`, `js/rules.js`, `app.html` |
 | Hostname (and its zone) | `SITE_HOSTNAME` GitHub variable (Turnstile widget, smoke test) |
+| Admin limit: how many admin accounts setup allows. Default 2, which leaves room for a future helper. Pastime uses 1. | `MAX_ADMINS = 2` in `worker/src/api/admin-auth.js`; "At most two admins" on `admin/setup.html` |
 
 Only the brand colors move. The status colors (error, OK, free, taken) stay the same for
 every club, so they always mean the same thing.
@@ -86,7 +87,7 @@ CI, so a threshold can't be added by accident.
 
 ## Decisions for the owner
 
-1, 2, 3 and 5 were agreed on 2026-11-28, as recommended. 4 is still open.
+All five were agreed on 2026-11-28, as recommended.
 
 1. **Resources and hours.** Today they live in the database and are edited on the admin
    pages. **Recommended:** the config holds the starting list, loaded once into an empty
@@ -100,9 +101,9 @@ CI, so a threshold can't be added by accident.
 3. **Time zone in the config.** It wasn't on the list, but it's club-specific.
    **Recommended:** yes. The nightly clean-up time (now picked for New York) then follows
    it.
-4. **Rules text. (Open.)** **Recommended:** one copy in the config, with the numbers filled
-   in from the limits (for example `{cancel_hours}`). Then the text can't disagree with the
-   actual rules.
+4. **Rules text.** **Recommended:** one copy in the config, with the numbers filled in from
+   the limits (for example `{cancel_hours}`). Then the text can't disagree with the actual
+   rules.
 5. **How other clubs run it.** **Recommended:** one separate deployment per club, each with
    its own Cloudflare account, database, secrets and admin. That keeps each club's member
    data apart and leaves the threat model as it is. Not one shared site for many clubs.
@@ -119,6 +120,8 @@ CI, so a threshold can't be added by accident.
   one test with different values to prove nothing is hard-coded.
 - The rules page, the booking confirmation and the "My bookings" page all show the same
   rules, from one source.
+- The admin limit comes from the config: setup closes after the configured number of admins
+  (one for Pastime), and the setup page shows that number.
 
 ## Not in this PR
 

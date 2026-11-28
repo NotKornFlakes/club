@@ -90,16 +90,19 @@ alone when editing the club's DNS.
    account with MFA on, with the login kept in the shared Proton Pass vault (emergency
    access). Anyone with that login can take over the website, the email and the booking
    site.
-2. **Can the nameservers be changed there?** If the registrar won't allow it, stop here and
+2. **Renewal. The domain expires on 2027-01-11.** The club must confirm that auto-renew is on
+   at the registrar and that the card on file is current. Do this first. If the domain
+   lapses, the website, the email and the booking site all stop working.
+3. **Can the nameservers be changed there?** If the registrar won't allow it, stop here and
    decide with the club. Moving the registration elsewhere is a separate project.
-3. **Current DNS host.** This is often the registrar. It could also be Weebly or another
+4. **Current DNS host.** This is often the registrar. It could also be Weebly or another
    company.
-4. **Email.** Which provider handles `@pastimeathleticclub.org` mail? Does anything else
+5. **Email.** Which provider handles `@pastimeathleticclub.org` mail? Does anything else
    send mail as the club (a newsletter tool, Weebly forms)?
-5. **Other names in use**, and what each one is for. Step 1 finds names, but not their
+6. **Other names in use**, and what each one is for. Step 1 finds names, but not their
    purpose.
-6. **Is DNSSEC on?** The `dig DS` line in step 1 shows it: any answer means it's on.
-7. **When to switch.** Pick a quiet time, not just before an event, when someone can send
+7. **Is DNSSEC on?** The `dig DS` line in step 1 shows it: any answer means it's on.
+8. **When to switch.** Pick a quiet time, not just before an event, when someone can send
    and receive test emails.
 
 ### Step 1: list every record (no changes)
@@ -140,8 +143,9 @@ alone when editing the club's DNS.
   # DKIM: dig +short TXT <selector>._domainkey.$D   (and CNAME, if the provider uses that)
   ```
 
-- Send one test email **to** a club address and one **from** it. In each message's full
-  headers, note the `spf=` and `dkim=` results, whatever they are (`pass`, `none`, ...).
+- Send one test email **to** a club address, and one **from** it to an address outside the
+  club. In each message's full headers, note the `spf=` and `dkim=` results, whatever they
+  are (`pass`, `none`, ...).
   After the switch, the same tests should show the same results.
 
 ### Step 2: build the copy in Cloudflare (owner, in the dashboard; nothing live changes)
@@ -244,31 +248,43 @@ These records help receiving mail servers tell real club email from fakes. The b
 doesn't need them, since it sends no email. They're the club's records, so the owner adds
 them in the Cloudflare dashboard, not Terraform.
 
-Do this only after step 5 has passed, and one record at a time, re-running the step 1 test
-emails after each one.
+Do this only after step 5 has passed, in the order below. After each record, send a test
+email from a club address **to an address outside the club** and read its
+`Authentication-Results` header. Google notes that you can't check DKIM by sending a message
+to yourself.
 
-1. **SPF** (a TXT record on the bare domain). It lists who may send mail as the club. First
-   list every sender from step 0, question 4: Google, plus any newsletter tool or form
-   service that sends *as* a club address. All of them go in **one** SPF record; a domain
-   must not have two. For Google only, Google's published value is
-   `v=spf1 include:_spf.google.com ~all`. `~all` means "probably not us", a soft start.
-2. **DKIM** (a TXT record that Google gives you). In Google Admin, under Gmail's "Authenticate
-   email" setting, generate a DKIM record. Add it in Cloudflare with exactly the name and
-   value Google shows (the name ends in `._domainkey`). Check it with `dig TXT` on that
-   name. Then go back to Google Admin and start authentication.
-3. **DMARC** (a TXT record at `_dmarc`). Start with `p=none`: mail is delivered as before,
-   and receivers only send reports. For example:
-   `v=DMARC1; p=none; rua=mailto:<club address for reports>`. For the reports, either use a
-   club mailbox, or Cloudflare's DMARC Management. It's available on all plans with
-   Cloudflare DNS, and it shows which sources pass SPF and DKIM. Follow its own setup
-   screen for the report address.
+1. **SPF**: a TXT record on the bare domain (name `@`). It lists who may send mail as the
+   club. Nothing changes in Google Admin.
+   - First list every sender from step 0, question 5: Google, plus any newsletter tool or
+     form service that sends *as* a club address. Then write **one** SPF record for the
+     domain that names them all, with an `include:` for each sender (Google allows up to 10).
+   - If only Google sends, Google's value is `v=spf1 include:_spf.google.com ~all`.
+   - Google recommends `~all` (mail from unlisted servers is marked as spam, not refused).
+   - It can take up to 48 hours to start working.
+2. **DKIM**: a TXT record that Google generates.
+   - In the Google Admin console, go to Apps → Google Workspace → Gmail → **Authenticate
+     email**. Pick the domain and choose **Generate new record**.
+   - Choose 2048-bit and keep the default prefix, `google`.
+   - Add the TXT record in Cloudflare with exactly the name (`google._domainkey`) and the
+     value (`v=DKIM1; k=rsa; p=...`) that Google shows. If Cloudflare won't take the long
+     value, Google's DKIM troubleshooting page covers TXT length limits, and 1024-bit is
+     Google's fallback.
+   - Check it with `dig +short TXT google._domainkey.pastimeathleticclub.org`. Then return to
+     Google Admin and click **Start authentication**.
+   - It can take up to 48 hours to start working. The test email's header then shows
+     `dkim=pass`.
+3. **DMARC**: a TXT record at `_dmarc`. Add it only once SPF and DKIM have been passing for
+   **at least 48 hours** (Google's rule).
+   - Start with `p=none`, as Google recommends: mail is delivered as before, and receivers
+     send reports. For example: `v=DMARC1; p=none; pct=100; rua=mailto:<reports mailbox>`.
+   - Google recommends always including `rua=`, sent to a dedicated mailbox or group, not a
+     person's own inbox. A report service works too: Cloudflare's DMARC Management is
+     available on all plans with Cloudflare DNS, and it shows which senders pass SPF and
+     DKIM. If you use it, follow its own setup screen for the report address.
 
-Watch the reports for a few weeks. Moving later from `p=none` to `p=quarantine` is a
-separate decision for the owner, once every real sender passes.
-
-Cloudflare's docs cover what these records are, but not Google's values. Google's own help
-in Google Admin is the authority for the SPF and DKIM values, so check them there when
-doing this step.
+Watch the reports for a few weeks. Google's advice is to move "over time" to `quarantine`
+(or `reject`). When to do that is a separate decision for the owner, once every real sender
+passes.
 
 ## 3. Sources
 
@@ -286,5 +302,8 @@ doing this step.
 | Cloudflare adds CAA records automatically for Universal SSL, not for Advanced Certificates | developers.cloudflare.com/ssl/edge-certificates/caa-records/ |
 | CAA values per certificate authority; which ones issue Advanced Certificates | developers.cloudflare.com/ssl/reference/certificate-authorities/ |
 | What SPF, DKIM and DMARC records are; DMARC Management (all plans, with Cloudflare DNS) | developers.cloudflare.com/dns/manage-dns-records/reference/dns-record-types/, developers.cloudflare.com/dmarc-management/ |
+| Google's SPF value; `~all`; up to 10 `include:` tags; up to 48 hours | knowledge.workspace.google.com/admin/security/set-up-spf (was support.google.com/a/answer/33786) |
+| DKIM steps in Google Admin; 2048/1024-bit; the `google` prefix; Start authentication; no self-test | knowledge.workspace.google.com/admin/security/set-up-dkim (was support.google.com/a/answer/174124) |
+| DMARC: start at `p=none`; `rua=` to a dedicated mailbox; wait 48 hours after SPF/DKIM | knowledge.workspace.google.com/admin/security/set-up-dmarc (was support.google.com/a/answer/2466580) |
 | API tokens can be limited to one zone | developers.cloudflare.com/fundamentals/api/get-started/create-token/ |
 | `cloudflare_workers_custom_domain` (`hostname`, `service`, `zone_id`/`zone_name`; Workers Scripts permissions); `cloudflare_dns_record` | github.com/cloudflare/terraform-provider-cloudflare, `docs/resources/`, v5.29.0 |

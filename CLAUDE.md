@@ -112,6 +112,8 @@ Rules page linked in the footer:
 ## Admin (me only)
 - There is no backup admin. Emergency access: a Proton Pass vault shared between me and one
   club officer.
+- The admin limit is a per-club config setting: default 2 (room for a future helper).
+  Pastime uses 1.
 - Separate admin login: strong password + TOTP 2FA. Separate cookie, 12-hour sessions.
 - Create/edit resources, hours, and club events.
 - Place one-off bookings with no date limit, and recurring blocks (leagues), both
@@ -188,6 +190,9 @@ Rules page linked in the footer:
 4. README: setup, issuing/resetting PINs, adding leagues, suspending a member,
    threat model, and a one-page "How to book" guide for members.
 5. Only cite official sources (developers.cloudflare.com, github.com, owasp.org).
+   Exception: Google's help (support.google.com, and knowledge.workspace.google.com where
+   its Workspace pages now redirect), for the Google email-record step only
+   (`docs/launch-dns.md`, step 8).
 6. Claude never merges PRs, never approves PRs or deployments, and never changes repo
    settings, rulesets, environments or secrets. Only the owner does these, in the GitHub web
    UI. Claude may read settings (GET requests) to verify them.
