@@ -119,7 +119,7 @@ worker/
   `clubs/<club>/club.json`, which `worker/src/club.js` imports (Pastime is the first and
   only club). `worker/src/club-config.js` checks it when the Worker starts: only known keys
   (so no secret or throttle value can be added by mistake), booking limits within the
-  database's own ceilings (2 hours, 2 upcoming bookings), and rules whose placeholders are
+  database's own ceiling (2 hours per booking), and rules whose placeholders are
   filled from the limits. The Worker then fills pages as it serves them (HTMLRewriter, text
   always escaped), and serves `/club.css` (accent colors) and `/js/club.js` (the public
   settings for the page scripts). No inline scripts, so the CSP doesn't change. Resources
@@ -354,7 +354,7 @@ Only while the alarm is on, the login page's CSP also allows
 | No double booking | **Database**: `booking_slots` primary key, filled by trigger |
 | 15-minute blocks; ends after it starts | **Database**: `CHECK` on `bookings` |
 | Member booking max 2 hours | **Database**: `CHECK` on `bookings` |
-| Max 2 upcoming per member (counts until it ends) | **Database**: trigger |
+| The club's booking limit: none, N upcoming, or N hours in any 7 days (was: max 2 upcoming) | **Worker**, in the same statement that saves the booking (`src/bookings.js`); the 0001 trigger's count was removed by migration 0003 |
 | Suspended or disabled members can't book | **Database**: trigger (also shown in the page) |
 | Members can only book slots that haven't started | **Database**: `CHECK` |
 | Up to 30 days ahead | Worker. Precisely: any slot on or before the club date 30 days from today (my call). |
@@ -687,6 +687,8 @@ BEGIN
          WHERE member_id = NEW.member_id AND status = 'active'
            AND ends_at > NEW.created_at) >= 2;
 END;
+-- Migration 0003 rebuilds this trigger without the count: each club's booking limit now
+-- comes from its settings file and is applied by the Worker (src/bookings.js).
 
 -- The audit log can be added to and pruned, never edited.
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log

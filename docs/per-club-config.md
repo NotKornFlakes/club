@@ -40,7 +40,7 @@ club, it's the default.
 | Logo | New |
 | Time zone | `CLUB_TIME_ZONE = "America/New_York"` in `worker/src/time.js` and `worker/public/js/common.js` |
 | Resources and opening hours: the starting list | Created in the admin pages today (see decision 1) |
-| Booking limits: max length, max upcoming bookings, days ahead, cancel cutoff, default suspension length, the no-show count in the rules | `worker/src/bookings.js`, `availability.js`, `discipline.js`; also written out by hand in `book.html`, `app.html`, `js/book.js`, `js/app.js` |
+| Booking limits: max length, the booking limit (none, upcoming, or hours in any 7 days), days ahead, cancel cutoff, default suspension length, the no-show count in the rules | `worker/src/bookings.js`, `availability.js`, `discipline.js`; also written out by hand in `book.html`, `app.html`, `js/book.js`, `js/app.js` |
 | Booking rules text | Three copies today: `rules.html`, `js/rules.js`, `app.html` |
 | Hostname (and its zone) | `SITE_HOSTNAME` GitHub variable (Turnstile widget, smoke test) |
 | Admin limit: how many admin accounts setup allows. Default 2, which leaves room for a future helper. Pastime uses 1. | `MAX_ADMINS = 2` in `worker/src/api/admin-auth.js`; "At most two admins" on `admin/setup.html` |
