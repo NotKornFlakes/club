@@ -46,7 +46,7 @@ describe("Pastime's settings", () => {
   it("keep the brief's booking limits", () => {
     expect(CLUB.booking).toEqual({
       max_length_minutes: 120,
-      max_upcoming: 2,
+      limit: { kind: "none" },
       days_ahead: 30,
       cancel_cutoff_hours: 24,
       suspension_months: 6,
@@ -81,14 +81,14 @@ describe("another club's settings", () => {
   it("change the wording everywhere it's built", () => {
     const club = parseClub(
       variant((c) => {
-        c.booking = { max_length_minutes: 90, max_upcoming: 1, days_ahead: 14, cancel_cutoff_hours: 1, suspension_months: 1, missed_bookings_limit: 1 };
+        c.booking = { max_length_minutes: 90, limit: { kind: "upcoming", max: 1 }, days_ahead: 14, cancel_cutoff_hours: 1, suspension_months: 1, missed_bookings_limit: 1 };
         c.time_zone = "America/Los_Angeles";
-        c.rules = ["Cancel {cancel_cutoff} ahead; book {days_ahead} ahead, {max_length} at most, {max_upcoming} at a time."];
+        c.rules = ["Cancel {cancel_cutoff} ahead; book {days_ahead} ahead, {max_length} at most; you can have {booking_limit}."];
       }),
     );
     expect(club.phrases).toMatchObject({
       max_length: "90 minutes",
-      max_upcoming: "1 upcoming booking",
+      booking_limit: "up to 1 upcoming booking at a time",
       days_ahead: "14 days",
       cancel_cutoff: "1 hour",
       suspension_length: "1 month",
@@ -96,7 +96,7 @@ describe("another club's settings", () => {
       admin_limit: "1 admin",
       time_zone_city: "Los Angeles",
     });
-    expect(club.rules).toEqual(["Cancel 1 hour ahead; book 14 days ahead, 90 minutes at most, 1 upcoming booking at a time."]);
+    expect(club.rules).toEqual(["Cancel 1 hour ahead; book 14 days ahead, 90 minutes at most; you can have up to 1 upcoming booking at a time."]);
   });
 
   it("get the default of two admins when they don't say", () => {
@@ -106,10 +106,28 @@ describe("another club's settings", () => {
     expect(club.phrases.admin_limit).toBe("2 admins");
   });
 
+  it("word each kind of booking limit for the pages and rules", () => {
+    /** @param {unknown} limit */
+    const phrase = (limit) => parseClub(variant((c) => (c.booking.limit = limit))).phrases.booking_limit;
+    expect(phrase({ kind: "none" })).toBe("as many bookings as you like");
+    expect(phrase({ kind: "upcoming", max: 4 })).toBe("up to 4 upcoming bookings at a time");
+    expect(phrase({ kind: "hours_per_week", hours: 6 })).toBe("up to 6 hours of bookings in any 7 days");
+    expect(phrase({ kind: "hours_per_week", hours: 1 })).toBe("up to 1 hour of bookings in any 7 days");
+  });
+
+  it("refuse a booking limit that isn't one of the three kinds", () => {
+    refused((c) => (c.booking.limit = { kind: "lots" }));
+    refused((c) => (c.booking.limit = 4));
+    refused((c) => (c.booking.limit = { kind: "upcoming" }));
+    refused((c) => (c.booking.limit = { kind: "upcoming", max: 0 }));
+    refused((c) => (c.booking.limit = { kind: "hours_per_week", hours: 6.5 }));
+    refused((c) => (c.booking.limit = { kind: "none", max: 4 }));
+    refused((c) => (c.booking.max_upcoming = 2));
+  });
+
   it("can't go over the limits the database enforces", () => {
-    expect(CEILINGS).toEqual({ max_length_minutes: 120, max_upcoming: 2 });
+    expect(CEILINGS).toEqual({ max_length_minutes: 120 });
     refused((c) => (c.booking.max_length_minutes = 135));
-    refused((c) => (c.booking.max_upcoming = 3));
     refused((c) => (c.booking.max_length_minutes = 50)); // not whole 15-minute blocks
   });
 
@@ -244,7 +262,7 @@ describe("pages, stylesheet and script", () => {
     /** A page's words, without tags or line breaks. @param {string} path */
     const words = (path) => (pages[path] ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
     expect(words("/book")).toContain("You can book up to 30 days ahead, in 15-minute blocks, for up to 2 hours.");
-    expect(words("/app")).toContain("You can have up to 2 upcoming bookings. Bookings can be cancelled up to 24 hours before they start.");
+    expect(words("/app")).toContain("You can have as many bookings as you like. Bookings can be cancelled up to 24 hours before they start.");
     expect(words("/app")).toContain("Members who miss 3 bookings may lose booking privileges for 6 months.");
     expect(words("/admin/setup")).toContain("At most 1 admin.");
     expect(words("/admin/resources")).toContain("Opening hours are in club time (New York).");

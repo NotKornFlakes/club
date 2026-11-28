@@ -2,7 +2,7 @@
 // Members' own bookings: book, list, cancel (the club's cancel cutoff), and "Add to calendar".
 
 import { bookingWindow, openRanges, withinOpenHours } from "../availability.js";
-import { CANCEL_CUTOFF_SECONDS, MAX_MEMBER_SECONDS, MAX_UPCOMING, bookingRefusal } from "../bookings.js";
+import { BOOKING_LIMIT, CANCEL_CUTOFF_SECONDS, MAX_MEMBER_SECONDS, insertMemberBooking } from "../bookings.js";
 import { CLUB } from "../club.js";
 import { activeSuspension, suspendedMessage } from "../discipline.js";
 import { HttpError, json } from "../http.js";
@@ -69,23 +69,9 @@ async function createBooking(ctx) {
     throw new HttpError(400, "closed", "That time is outside the opening hours. Please pick another.");
   }
 
-  // One statement, so two quick requests can't both get under the club's limit. The
-  // database's own trigger still refuses anything over its ceiling.
-  let row;
-  try {
-    row = await env.DB.prepare(
-      `INSERT INTO bookings (resource_id, kind, member_id, starts_at, ends_at, created_at)
-       SELECT ?, 'member', ?, ?, ?, ?
-       WHERE (SELECT COUNT(*) FROM bookings WHERE member_id = ? AND status = 'active' AND ends_at > ?) < ?
-       RETURNING id`,
-    )
-      .bind(resource.id, member.memberId, start, end, now, member.memberId, now, MAX_UPCOMING)
-      .first();
-  } catch (error) {
-    bookingRefusal(error);
-  }
-  if (!row) bookingRefusal(new Error("too_many_upcoming"));
-  const booking = bookingView({ id: row.id, resource_name: resource.name, starts_at: start, ends_at: end }, now);
+  // Saved only if it stays within the club's booking limit (see ../bookings.js).
+  const id = await insertMemberBooking(env.DB, BOOKING_LIMIT, { resourceId: resource.id, memberId: member.memberId, start, end, now });
+  const booking = bookingView({ id, resource_name: resource.name, starts_at: start, ends_at: end }, now);
   return json({ booking }, 201);
 }
 

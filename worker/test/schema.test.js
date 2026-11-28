@@ -173,14 +173,14 @@ describe("member booking rules", () => {
     );
   });
 
-  it("allows at most 2 upcoming bookings, counting each until it ends", async () => {
+  it("leaves the booking limit to the club's settings (migration 0003): no count in the database", async () => {
+    // The Worker applies each club's limit when it saves a booking (test/booking.test.js).
     const member = await newMember();
     const court = await newResource();
-    await bookMember(member, court, NOW + 1 * H, NOW + 2 * H);
-    await bookMember(member, court, NOW + 3 * H, NOW + 4 * H);
-    await expect(bookMember(member, court, NOW + 5 * H, NOW + 6 * H)).rejects.toThrow(/too_many_upcoming/);
-    // Once both have ended, the member can book again.
-    await expect(bookMember(member, court, NOW + 9 * H, NOW + 10 * H, NOW + 5 * H)).resolves.toBeTypeOf("number");
+    for (let i = 0; i < 4; i += 1) await expect(bookMember(member, court, NOW + (1 + 2 * i) * H, NOW + (2 + 2 * i) * H)).resolves.toBeTypeOf("number");
+    const trigger = await db.prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'bookings_member_rules'").first();
+    expect(String(trigger?.sql)).not.toContain("too_many_upcoming");
+    expect(String(trigger?.sql)).toContain("member_suspended");
   });
 
   it("refuses suspended members until the suspension is lifted", async () => {

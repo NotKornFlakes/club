@@ -10,7 +10,16 @@
  * Limits the database itself enforces for every club (worker/migrations/0001_init.sql).
  * A club can set the same or less, never more.
  */
-export const CEILINGS = Object.freeze({ max_length_minutes: 120, max_upcoming: 2 });
+export const CEILINGS = Object.freeze({ max_length_minutes: 120 });
+
+/**
+ * The kinds of booking limit a club can choose (booking.limit in its settings):
+ *   none            no limit on how much a member books (still 30 days ahead, 2 hours each)
+ *   upcoming        at most `max` bookings that haven't finished yet
+ *   hours_per_week  at most `hours` hours booked in any 7 days in a row
+ * Admin bookings and leagues never count: only a member's own bookings do.
+ */
+export const LIMIT_KINDS = Object.freeze(["none", "upcoming", "hours_per_week"]);
 
 /** How many admins setup allows when a club's file doesn't say. */
 export const DEFAULT_MAX_ADMINS = 2;
@@ -21,7 +30,7 @@ export const RULE_PLACEHOLDERS = Object.freeze([
   "missed_bookings",
   "suspension_length",
   "max_length",
-  "max_upcoming",
+  "booking_limit",
   "days_ahead",
 ]);
 
@@ -42,7 +51,7 @@ const TOP_KEYS = [
 ];
 const BOOKING_KEYS = [
   "max_length_minutes",
-  "max_upcoming",
+  "limit",
   "days_ahead",
   "cancel_cutoff_hours",
   "suspension_months",
@@ -50,6 +59,7 @@ const BOOKING_KEYS = [
 ];
 
 /**
+ * @typedef {{ kind: "none" } | { kind: "upcoming", max: number } | { kind: "hours_per_week", hours: number }} Limit
  * @typedef {{ accent: string, accent_text: string }} Scheme
  * @typedef {{ background: string, text: string, highlight: string }} Brand
  * @typedef {{ label: string, url: string }} Link
@@ -57,11 +67,11 @@ const BOOKING_KEYS = [
  * @typedef {{ id: string, name: string, any_label: string | null }} Area
  * @typedef {{ name: string, area: string }} StartingResource
  * @typedef {{
- *   max_length_minutes: number, max_upcoming: number, days_ahead: number,
+ *   max_length_minutes: number, limit: Limit, days_ahead: number,
  *   cancel_cutoff_hours: number, suspension_months: number, missed_bookings_limit: number,
  * }} BookingLimits
  * @typedef {{
- *   days_ahead: string, max_length: string, max_upcoming: string, cancel_cutoff: string,
+ *   days_ahead: string, max_length: string, booking_limit: string, cancel_cutoff: string,
  *   missed_bookings: string, suspension_length: string, admin_limit: string, time_zone_city: string,
  * }} Phrases
  * @typedef {{
@@ -236,6 +246,24 @@ function areaList(raw) {
   return Object.freeze(areas);
 }
 
+/** @param {unknown} raw @returns {Limit} */
+function bookingLimit(raw) {
+  const kind = isObject(raw) ? raw.kind : undefined;
+  if (kind === "none") {
+    exactKeys(raw, "booking.limit", ["kind"]);
+    return Object.freeze({ kind: "none" });
+  }
+  if (kind === "upcoming") {
+    const l = exactKeys(raw, "booking.limit", ["kind", "max"]);
+    return Object.freeze({ kind: "upcoming", max: whole(l.max, "booking.limit.max", 1, 50) });
+  }
+  if (kind === "hours_per_week") {
+    const l = exactKeys(raw, "booking.limit", ["kind", "hours"]);
+    return Object.freeze({ kind: "hours_per_week", hours: whole(l.hours, "booking.limit.hours", 1, 168) });
+  }
+  throw problem("booking.limit", `must be { "kind": ${LIMIT_KINDS.map((k) => `"${k}"`).join(", ")} ... }`);
+}
+
 /** "1 hour", "2 hours". @param {number} n @param {string} one @param {string} many */
 const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -265,7 +293,7 @@ export function parseClub(raw) {
   /** @type {BookingLimits} */
   const booking = Object.freeze({
     max_length_minutes: whole(b.max_length_minutes, "booking.max_length_minutes", 15, CEILINGS.max_length_minutes, 15),
-    max_upcoming: whole(b.max_upcoming, "booking.max_upcoming", 1, CEILINGS.max_upcoming),
+    limit: bookingLimit(b.limit),
     days_ahead: whole(b.days_ahead, "booking.days_ahead", 1, 365),
     cancel_cutoff_hours: whole(b.cancel_cutoff_hours, "booking.cancel_cutoff_hours", 0, 168),
     suspension_months: whole(b.suspension_months, "booking.suspension_months", 1, 24),
@@ -276,7 +304,13 @@ export function parseClub(raw) {
   const phrases = Object.freeze({
     days_ahead: count(booking.days_ahead, "day", "days"),
     max_length: duration(booking.max_length_minutes),
-    max_upcoming: count(booking.max_upcoming, "upcoming booking", "upcoming bookings"),
+    // "You can have <booking_limit>."
+    booking_limit:
+      booking.limit.kind === "upcoming"
+        ? `up to ${count(booking.limit.max, "upcoming booking", "upcoming bookings")} at a time`
+        : booking.limit.kind === "hours_per_week"
+          ? `up to ${count(booking.limit.hours, "hour", "hours")} of bookings in any 7 days`
+          : "as many bookings as you like",
     cancel_cutoff: count(booking.cancel_cutoff_hours, "hour", "hours"),
     missed_bookings: count(booking.missed_bookings_limit, "booking", "bookings"),
     suspension_length: count(booking.suspension_months, "month", "months"),

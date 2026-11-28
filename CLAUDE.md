@@ -85,7 +85,9 @@ other than GitHub. Repo is PUBLIC, so never commit secrets, member data, or PINs
   (America/New_York for Pastime; stays correct across DST). Whether and how members book
   bowling lanes: pending club answer.
 - 15-minute blocks; a booking is 1+ consecutive blocks, max 2 hours.
-- Max 2 upcoming bookings per member (a booking counts until it ends).
+- The booking limit per member is a per-club setting (decided 2026-11-28): none, a number
+  of upcoming bookings (each counts until it ends), or a number of hours in any 7 days in a
+  row. Pastime: no limit. Admin and editor bookings, and leagues, never count.
 - Book up to 30 days ahead (rolling 30 days, not calendar months). Show it to members as
   "up to 30 days ahead".
 - Booked slots show only "Taken". Never show names or member numbers to members.
